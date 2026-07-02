@@ -305,7 +305,7 @@ class AgentService:
                 )
 
         # Check for flow control tools
-        should_continue = True
+        should_continue = True if bot_message["content"] or bot_message["tool_calls"] else False
         tool_call_names = [t["function"]["name"] for t in bot_message["tool_calls"] or []]
         if FlowContinueTool.name in tool_call_names:
             should_continue = True
