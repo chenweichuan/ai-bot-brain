@@ -1,0 +1,51 @@
+{
+  "debug": false,
+  "owner_name": "User",
+  "bot_name": "Bot",
+  "bot_alias": "",
+  "bot_os_user": "bot",
+  "bot_os_workspace": "/path/to/workspace",
+  "os_display": ":0",
+  "storage_base_path": "/path/to/storage",
+  "storage_base_url": "https://your-domain.com/storage",
+  "tmp_base_path": "/path/to/tmp",
+  "models_base_path": "/path/to/models",
+  "short_link_base_url": "https://your-domain.com/l",
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": "your_redis_password"
+  },
+  "chat_model": "doubao-lite",
+  "think_model": "doubao-lite",
+  "memory_model": "doubao-lite",
+  "image_model": "doubao-seedream",
+  "rate_limit_image": 2,
+  "doubaoai_api_base": "https://ark.cn-beijing.volces.com/api/v3",
+  "doubaoai_api_key": "your_doubaoai_api_key",
+  "zhipuai_api_base": "https://open.bigmodel.cn/api/paas/v4",
+  "zhipuai_api_key": "your_zhipuai_api_key",
+  "googleai_api_base": "https://your-googleai-proxy.com/v1beta",
+  "googleai_api_key": "your_googleai_api_key",
+  "openai_api_base": "https://your-openai-proxy.com/v1",
+  "openai_api_key": "your_openai_api_key",
+  "content_moderation": {
+    "enabled": true,
+    "provider": "aliyun",
+    "fallback_action": "allow",
+    "reject_log_only": false,
+    "aliyun": {
+      "access_key_id": "your_aliyun_access_key_id",
+      "access_key_secret": "your_aliyun_access_key_secret",
+      "region_id": "cn-beijing",
+      "endpoint": "green-cip.cn-beijing.aliyuncs.com",
+      "backup_endpoint": "green-cip.cn-shanghai.aliyuncs.com"
+    }
+  },
+  "tencent_search_secret_id": "your_tencent_search_secret_id",
+  "tencent_search_secret_key": "your_tencent_search_secret_key",
+  "volc_search_api_key": "your_volc_search_api_key",
+  "proxy_pool_url": "http://127.0.0.1:5010/get/",
+  "chromium_path": "/usr/bin/chromium-browser"
+}
