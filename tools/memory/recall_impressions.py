@@ -37,12 +37,12 @@ class RecallImpressionsTool(Tool):
                     "properties": {
                         "category": {
                             "type": "string",
-                            "description": f"Relevant impression category to query. Returns related labels and impressions.",
+                            "description": f"Impression category to query. Returns related labels and impressions.",
                         },
                         "labels": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": f"List of relevant impression labels to query (max {self.MAX_QUERY_LABELS}). Returns related impressions.",
+                            "description": f"List of impression labels to query (max {self.MAX_QUERY_LABELS}). Returns related impressions.",
                         },
                         "mod_time_before": {
                             "type": "string",

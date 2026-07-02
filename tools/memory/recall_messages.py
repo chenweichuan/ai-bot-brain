@@ -27,15 +27,15 @@ class RecallMessagesTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Retrieve historical conversation messages from memory through relevant impression clues. "
-                    "Use this tool when you need to recall specific past conversation messages based on related impression clues.",
+                "description": "Retrieve historical conversation messages from memory through specific impression clues. "
+                    "Use this tool when you need to recall past conversation messages based on specific impression clues.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "clues": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": f"List of relevant impression clues to query (max {self.MAX_QUERY_CLUES}).",
+                            "description": f"List of impression clues to query (max {self.MAX_QUERY_CLUES}).",
                         },
                         "time_before": {
                             "type": "string",

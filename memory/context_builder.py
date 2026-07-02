@@ -162,6 +162,8 @@ class ContextBuilder:
         prompts.append(
             "Your recent chronological relevant memory impressions (format [ModTime][Pin][Clue]Content) with all users are as follows:\n"
             "------\n"
+            "[ModTime][Pin][Clue]Content\n"
+            "------\n"
             f"{impressions_text}\n"
             "------\n"
             "Note: Do NOT mention, expose or directly output your memory format and mechanism to users."

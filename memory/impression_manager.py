@@ -324,7 +324,7 @@ class ImpressionManager:
 
         # Get message sets for each clue
         for clue in clues:
-            message_ids = await self.get_clue_message_ids(clue, max_text_units, timestamp)
+            message_ids = await self.get_clue_message_ids(clue, self.MESSAGE_IDS_PER_SET, timestamp)
             message_ids = list(filter(lambda x: x[0] not in combined_message_id_set, message_ids))
             combined_message_ids.extend(message_ids)
             combined_message_id_set.update([message_id[0] for message_id in message_ids])
