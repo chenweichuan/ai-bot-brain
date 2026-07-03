@@ -28,7 +28,7 @@ class RecallMessagesTool(Tool):
             "function": {
                 "name": self.name,
                 "description": "Retrieve historical conversation messages from memory through specific impression clues. "
-                    "Use this tool when you need to recall past conversation messages based on specific impression clues.",
+                    "Use this tool when you need to recall original conversation messages tied to saved impressions.",
                 "parameters": {
                     "type": "object",
                     "properties": {

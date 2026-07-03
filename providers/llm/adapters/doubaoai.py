@@ -16,7 +16,6 @@ API_BASE = conf().get("doubaoai_api_base", "")
 API_KEY = conf().get("doubaoai_api_key", "")
 
 MODEL_ENDPOINT_REF = {
-  "doubao-lite": "doubao-seed-2-0-lite-260428",
   "doubao-turbo": "doubao-seed-2-1-turbo-260628",
   "doubao-pro": "doubao-seed-2-1-pro-260628",
 }

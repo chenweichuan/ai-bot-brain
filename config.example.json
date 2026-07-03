@@ -17,9 +17,9 @@
     "db": 0,
     "password": "your_redis_password"
   },
-  "chat_model": "doubao-lite",
-  "think_model": "doubao-lite",
-  "memory_model": "doubao-lite",
+  "chat_model": "doubao-turbo",
+  "think_model": "doubao-turbo",
+  "memory_model": "doubao-turbo",
   "image_model": "doubao-seedream",
   "rate_limit_image": 2,
   "doubaoai_api_base": "https://ark.cn-beijing.volces.com/api/v3",

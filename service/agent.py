@@ -63,7 +63,7 @@ class AgentService:
         actions: List[Dict[str, str]] = [],
         tools: List[Dict[str, Any]] = [],
         thinking: bool = True,
-        temperature: float = 0.1,
+        temperature: float = 0.2,
         top_p: float = 0.85,
         max_text_units: int = ContextBuilder.MAX_TEXT_UNITS,
         max_messages: int = ContextBuilder.MAX_MESSAGES,
