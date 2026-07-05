@@ -130,6 +130,7 @@ class AgentService:
             "to_name": username,
         })
         bot_model = None
+        llm_finish_reason = None
 
         # Add bot message placeholder to history
         history.append(bot_message)
@@ -234,6 +235,10 @@ class AgentService:
                     else:
                         bot_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"]["arguments"]
  
+                # Handle finish reason
+                if delta.get("finish_reason"):
+                    llm_finish_reason = delta["finish_reason"]
+ 
                 # Save message to session manager
                 await self.session_manager.save_message(session_id, bot_message)
  
@@ -304,15 +309,21 @@ class AgentService:
                     history=history.copy(),
                 )
 
-        # Check for flow control tools
-        should_continue = True if bot_message["content"] or bot_message["tool_calls"] else False
+        # Check if we should continue thinking
+        should_continue = False
         tool_call_names = [t["function"]["name"] for t in bot_message["tool_calls"] or []]
-        if FlowContinueTool.name in tool_call_names:
-            should_continue = True
-        elif FlowWaitForInputTool.name in tool_call_names:
+        if FlowWaitForInputTool.name in tool_call_names:
+            # If FlowWaitForInputTool is called, we should stop thinking and wait for user input
             should_continue = False
         elif FlowCompleteTool.name in tool_call_names:
+            # If FlowCompleteTool is called, we should stop thinking
             should_continue = False
+        elif bot_message["tool_calls"]:
+            # If there are any other tool calls, we should continue thinking
+            should_continue = True
+        elif llm_finish_reason != "stop" and bot_message.get("content"):
+            # If LLM did not stop and there is content, it may indicate that the LLM wants to continue thinking
+            should_continue = True
 
         # Recursive call
         if should_continue and depth < max_depth:
