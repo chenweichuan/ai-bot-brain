@@ -47,5 +47,6 @@
   "tencent_search_secret_key": "your_tencent_search_secret_key",
   "volc_search_api_key": "your_volc_search_api_key",
   "proxy_pool_url": "http://127.0.0.1:5010/get/",
-  "chromium_path": "/usr/bin/chromium-browser"
+  "chromium_path": "/usr/bin/chromium-browser",
+  "auto_scheduler_interval": 3600
 }

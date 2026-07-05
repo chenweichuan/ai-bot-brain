@@ -37,6 +37,7 @@ class AutoScheduler:
         self.SESSION_ID_KEY = f"{self.KEY_PREFIX}:session_id"
         self.LOCK_KEY = f"{self.KEY_PREFIX}:running_lock"
         self.LOCK_TIMEOUT = 30  # Lock expires
+        self.SCHEDULER_INTERVAL = conf().get("auto_scheduler_interval", 3600)
 
     async def _acquire_lock(self) -> bool:
         """Acquire distributed lock to prevent concurrent execution"""
@@ -167,6 +168,6 @@ You can:
                     logger.error(f"Error in master scheduler: {e}")
                     logger.exception(e)
                 finally:
-                    await asyncio.sleep(3600)
+                    await asyncio.sleep(_instance.SCHEDULER_INTERVAL)
 
         asyncio.create_task(master_scheduler())
