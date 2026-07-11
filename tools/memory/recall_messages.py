@@ -98,7 +98,7 @@ class RecallMessagesTool(Tool):
                 result_parts.append(
                     "No raw messages found linked to this clue. "
                     "The original messages may have been automatically cleaned up, "
-                    "or specific clues have no associated message IDs.\n"
+                    "or invalid clue was specified.\n"
                 )
             
             full_result = "\n".join(result_parts)

@@ -43,16 +43,11 @@ class RecallImpressionsTool(Tool):
                             "type": "array",
                             "items": {"type": "string"},
                             "description": f"List of impression labels to query (max {self.MAX_QUERY_LABELS}). Returns related impressions.",
-                        },
-                        "mod_time_before": {
-                            "type": "string",
-                            "description": f"`YYYY-MM-DD HH:MM:SS` 24-hour format (e.g., '{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}') to filter impressions before this modification time point",
                         }
                     },
                     "anyOf": [
                         {"required": ["category"]},
-                        {"required": ["labels"]},
-                        {"required": ["mod_time_before"]}
+                        {"required": ["labels"]}
                     ]
                 }
             }
@@ -76,13 +71,6 @@ class RecallImpressionsTool(Tool):
             # Parse input parameters
             category: str = args.get("category").strip() if args.get("category") else ""
             labels: List[str] = [label.strip() for label in args.get("labels") or []][:self.MAX_QUERY_LABELS]
-            mod_time_before: str = args.get("mod_time_before")
-            
-            # Convert time string to timestamp (milliseconds), plus one millisecond to exclude the exact time point
-            if mod_time_before:
-                mod_timestamp_before = time.mktime(time.strptime(mod_time_before, '%Y-%m-%d %H:%M:%S')) * 1_000 + 1_000
-            else:
-                mod_timestamp_before = time.time_ns() / 1_000_000
             
             potential_label_scores = {}
             potential_label_tuples = []
@@ -98,9 +86,7 @@ class RecallImpressionsTool(Tool):
             # Query clues by labels
             clue_tuples_by_labels = []
             for label in labels:
-                clue_tuples = await self.impression_manager.get_label_clues(
-                    label, timestamp=mod_timestamp_before
-                )
+                clue_tuples = await self.impression_manager.get_label_clues(label)
                 for clue, score in clue_tuples:
                     if clue not in potential_clue_scores:
                         potential_clue_scores[clue] = score
@@ -124,9 +110,7 @@ class RecallImpressionsTool(Tool):
             # Query clues by category
             clue_tuples_by_category = []
             if category:
-                clue_tuples = await self.impression_manager.get_category_clues(
-                    category, timestamp=mod_timestamp_before
-                )
+                clue_tuples = await self.impression_manager.get_category_clues(category)
                 for clue, score in clue_tuples:
                     if clue not in potential_clue_scores:
                         potential_clue_scores[clue] = score
@@ -144,9 +128,7 @@ class RecallImpressionsTool(Tool):
                     potential_label_tuples.append((label, score))
                 
                 # Query recent clues
-                recent_clue_tuples = await self.impression_manager.get_recent_clues(
-                    timestamp=mod_timestamp_before
-                )
+                recent_clue_tuples = await self.impression_manager.get_recent_clues()
                 for clue, score in recent_clue_tuples:
                     potential_clue_scores[clue] = score
                     potential_clue_tuples.append((clue, score))
@@ -189,14 +171,13 @@ class RecallImpressionsTool(Tool):
             # Create summary
             conditions = " and ".join(list(filter(lambda x: x, [
                 f"category ({category})" if category else "",
-                f"labels ({', '.join(labels)})" if labels else "",
-                f"before {mod_time_before}" if mod_time_before else ""
+                f"labels ({', '.join(labels)})" if labels else ""
             ])))
             summary = f"✅ Recalled {len(potential_impression_tuples)} potential impressions"
             summary += f" from {conditions}" if conditions else ""
             
             logger.info(
-                f"Recalled impressions for category({category}) and labels({', '.join(labels)}) before({mod_time_before}), "
+                f"Recalled impressions for category({category}) and labels({', '.join(labels)}), "
                 f"count: {len(potential_label_tuples)} labels, "
                 f"{len(potential_impression_tuples)} impressions, "
             )

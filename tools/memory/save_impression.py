@@ -28,14 +28,15 @@ class SaveImpressionTool(Tool):
                 "description": "Generate a memory impression that needs to be saved in an ultra-compact information-dense form "
                     "using an ultra-compact symbolic system, to serve as a contextual memory trace. "
                     "It must be able to help you recall the key information here. "
-                    "Prioritize selecting from existing Clue, Category and Label sets. "
+                    "Naming convention: clue uses UPPERCASE with hyphens; category and label use PascalCase. "
+                    "Prioritize reusing and aligning with existing Clue, Category and Label sets. "
                     "No need to consider human readability.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "clue": {
                             "type": "string",
-                            "description": "Extremely concise, reusable, time-free identifier without any time-related information, and should reasonably consider including user differentiation markers when appropriate. Give priority to merging or updating information for existing clues."
+                            "description": "Extremely concise, reusable identifier without time-of-day information, and should reasonably consider including user differentiation markers when appropriate. Give priority to merging or updating information for existing clues."
                         },
                         "content": {
                             "type": "string",

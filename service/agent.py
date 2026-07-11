@@ -171,7 +171,8 @@ class AgentService:
                 if not chunk.get("choices"):
                     continue
 
-                delta = chunk["choices"][0].get("delta", {})
+                choice = chunk["choices"][0]
+                delta = choice.get("delta", {})
 
                 # Send actual model name at the first chunk
                 if not bot_model:
@@ -236,8 +237,8 @@ class AgentService:
                         bot_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"]["arguments"]
  
                 # Handle finish reason
-                if delta.get("finish_reason"):
-                    llm_finish_reason = delta["finish_reason"]
+                if choice.get("finish_reason"):
+                    llm_finish_reason = choice["finish_reason"]
  
                 # Save message to session manager
                 await self.session_manager.save_message(session_id, bot_message)
