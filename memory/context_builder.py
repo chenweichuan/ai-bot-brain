@@ -174,6 +174,7 @@ class ContextBuilder:
             "------\n"
             "- Audio file: `!audio[Title](audio_url)`\n"
             "- Video file: `!video[Title](video_url)`\n"
+            "- Webpage file: `!webpage[Title](webpage_url)`\n"
             "------"
         )
 
