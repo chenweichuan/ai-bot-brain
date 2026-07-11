@@ -82,18 +82,44 @@ class PatchFileTool(Tool):
                 # Get total line count of file, validate line numbers
                 line_count_command = f"wc -l < {shlex.quote(file_path)}"
                 returncode, line_count_output, stderr = await self.computer_client.exec_command(line_count_command)
-                total_lines = int(line_count_output.strip())
-                if start_line > total_lines:
-                    error_msg = f"Error: start_line ({start_line}) exceeds total file lines ({total_lines})"
-                    summary = f"❌ Invalid line range: start line {start_line} > total lines {total_lines}"
+                if returncode != 0:
+                    error_msg = f"Error: Failed to get line count for '{file_path}': {line_count_output} {stderr}"
+                    summary = f"❌ Failed to get line count ({file_path}): {line_count_output[:100]} {stderr[:100]}".replace('\n', ' ')
                     return (error_msg, summary)
                 
-                # Escape content for sed
-                escaped_content = content.replace('\\', '\\\\').replace("'", r"'\''").replace('\n', '\\n')
+                total_lines = int(line_count_output.strip())
                 
-                # Build sed command for in-place replacement
-                # Syntax: sed -i 'start,endc\content' file
-                write_command = f"sed -i '{start_line},{end_line}c\\{escaped_content}' {shlex.quote(file_path)}"
+                # Full boundary check
+                if start_line < 1 or end_line < 1:
+                    return (f"Error: Line numbers must be >= 1 (start={start_line}, end={end_line})",
+                            f"❌ Invalid line range: lines must be >= 1")
+                if start_line > end_line:
+                    return (f"Error: start_line ({start_line}) > end_line ({end_line})",
+                            f"❌ Invalid line range: start {start_line} > end {end_line}")
+                if end_line > total_lines:
+                    return (f"Error: end_line ({end_line}) exceeds total file lines ({total_lines})",
+                            f"❌ Invalid line range: end line {end_line} > total lines {total_lines}")
+                
+                # Build ed script
+                ed_script_lines = [
+                    f"{start_line},{end_line}c"
+                ]
+                # Escape lines that start with '.' for ed
+                for line in content.split('\n'):
+                    if line.startswith('.'):
+                        ed_script_lines.append('.' + line)
+                    else:
+                        ed_script_lines.append(line)
+                ed_script_lines.extend([
+                    ".",
+                    "w",
+                    "q"
+                ])
+                ed_script = '\n'.join(ed_script_lines)
+                
+                # Use ed with here-document
+                quoted_file = shlex.quote(file_path)
+                write_command = f"ed -s {quoted_file} << 'ED_EOF'\n{ed_script}\nED_EOF"
                 
                 # Execute command
                 returncode, stdout, stderr = await self.computer_client.exec_command(write_command)
