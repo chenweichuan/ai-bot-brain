@@ -128,9 +128,10 @@ class AgentService:
             "content": "",
             "tool_calls": None,
             "to_name": username,
+            "model": None,
+            "streaming": True,
+            "finish_reason": None,
         })
-        bot_model = None
-        llm_finish_reason = None
 
         # Add bot message placeholder to history
         history.append(bot_message)
@@ -175,9 +176,9 @@ class AgentService:
                 delta = choice.get("delta", {})
 
                 # Send actual model name at the first chunk
-                if not bot_model:
-                    bot_model = chunk.get("model") or model
-                    yield { "model": bot_model }
+                if not bot_message.get("model"):
+                    bot_message["model"] = chunk.get("model") or model
+                    yield { "model": bot_message["model"] }
                 
                 # Handle reasoning_content
                 if delta.get("reasoning_content"):
@@ -238,7 +239,7 @@ class AgentService:
  
                 # Handle finish reason
                 if choice.get("finish_reason"):
-                    llm_finish_reason = choice["finish_reason"]
+                    bot_message["finish_reason"] = choice["finish_reason"]
  
                 # Save message to session manager
                 await self.session_manager.save_message(session_id, bot_message)
@@ -302,6 +303,8 @@ class AgentService:
             yield { "finish_reason": "error" }
             return
         finally:
+            bot_message["streaming"] = False
+            await self.session_manager.save_message(session_id, bot_message)
             # If bot_message has content or tool_calls, add memory task to queue
             if bot_message.get("content") or bot_message.get("tool_calls"):
                 await self._put_memory_queue(
@@ -322,7 +325,7 @@ class AgentService:
         elif bot_message["tool_calls"]:
             # If there are any other tool calls, we should continue thinking
             should_continue = True
-        elif llm_finish_reason != "stop" and bot_message.get("content"):
+        elif bot_message["finish_reason"] != "stop" and bot_message.get("content"):
             # If LLM did not stop and there is content, it may indicate that the LLM wants to continue thinking
             should_continue = True
 
@@ -428,9 +431,9 @@ class AgentService:
         获取会话消息历史
         """
         valid_fields = [
-            "id", "timestamp", 
+            "id", "timestamp", "mod_time", 
             "role", "reasoning_content", "content",
-            "name", "tool_calls", "tool_call_id",
+            "name", "tool_calls", "tool_call_id", "model",
         ]
         
         await self.session_manager.check_user_session(username, session_id)

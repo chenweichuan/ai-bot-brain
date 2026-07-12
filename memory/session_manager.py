@@ -97,6 +97,9 @@ class SessionManager:
             message_id = message["id"]
             timestamp = message["timestamp"]
             
+            # 设置消息的最后修改时间
+            message["mod_time"] = time.time_ns() / 1_000_000
+            
             # 使用pipeline进行原子操作
             pipe = await self.redis_client.pipeline()
             
