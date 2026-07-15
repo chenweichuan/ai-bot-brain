@@ -17,19 +17,12 @@ class RedisClient:
     @classmethod
     def get_instance(cls) -> redis.Redis:
         """
-        获取Redis客户端实例（单例模式）
+        获取Redis客户端实例（单例模式，懒加载）
         
         Returns:
             Redis客户端实例
         """
-        return cls._instance
-
-    @classmethod
-    async def initialize(cls):
-        """
-        初始化Redis连接
-        """
-        try:
+        if cls._instance is None:
             cls._instance = redis.Redis(
                 host=conf().get("redis", {}).get("host", "localhost"),
                 port=conf().get("redis", {}).get("port", 6379),
@@ -37,11 +30,4 @@ class RedisClient:
                 password=conf().get("redis", {}).get("password") or None,
                 decode_responses=True
             )
-            # 测试连接
-            await cls._instance.ping()
-            logger.info("[Redis] Connection established successfully")
-        except Exception as e:
-            logger.error(f"[Redis] Failed to connect: {e}")
-            raise
-
-
+        return cls._instance

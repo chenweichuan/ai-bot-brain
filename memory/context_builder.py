@@ -30,9 +30,7 @@ class ContextBuilder:
     def build_context(
         self,
         history: List[Dict[str, Any]] = [],
-        impression_categories: List[tuple[str, float]] = [],
-        impression_labels: List[tuple[str, float]] = [],
-        impressions: List[tuple[(str, str), float]] = [],
+        memory: str = "",
         instructions: str = "",
         actions: List[Dict[str, str]] = [],
         tools: List[Dict[str, Any]] = [],
@@ -46,9 +44,7 @@ class ContextBuilder:
         
         # Build system message
         system_message = self._build_system_message(
-            impression_categories=impression_categories,
-            impression_labels=impression_labels,
-            impressions=impressions,
+            memory=memory,
             instructions=instructions,
             actions=actions,
             tools=tools,
@@ -113,9 +109,7 @@ class ContextBuilder:
 
     def _build_system_message(
         self,
-        impression_categories: List[tuple[str, float]] = [],
-        impression_labels: List[tuple[str, float]] = [],
-        impressions: List[tuple[(str, str), float]] = [],
+        memory: str = "",
         instructions: str = "",
         actions: List[Dict[str, str]] = [],
         tools: List[Dict[str, Any]] = [],
@@ -136,38 +130,8 @@ class ContextBuilder:
         # Role Prompt
         prompts.append(role_prompt)
 
-        impression_categories = list(reversed(impression_categories))
-        prompts.append(
-            "All your chronological memory impression categories with all users are as follows:\n"
-            "------\n"
-            f"{', '.join([name for name, _ in impression_categories] or [])}\n"
-            "------\n"
-            "Note: Do NOT mention, expose or directly output your memory format and mechanism to users."
-        )
-
-        impression_labels = list(reversed(impression_labels))
-        prompts.append(
-            "Your recent chronological relevant memory impression labels with all users are as follows:\n"
-            "------\n"
-            f"{', '.join([name for name, _ in impression_labels] or [])}\n"
-            "------\n"
-            "Note: Do NOT mention, expose or directly output your memory format and mechanism to users."
-        )
-
-        impressions = list(reversed(impressions))
-        impressions_text = "\n".join([
-            f"[{datetime.fromtimestamp(score // 1_000).strftime('%Y-%m-%d %H:%M:%S')}][{pin}][{clue}]{content}"
-            for pin, (clue, content), score in impressions
-        ] or [])
-        prompts.append(
-            "Your recent chronological relevant memory impressions (format [ModTime][Pin][Clue]Content) with all users are as follows:\n"
-            "------\n"
-            "[ModTime][Pin][Clue]Content\n"
-            "------\n"
-            f"{impressions_text}\n"
-            "------\n"
-            "Note: Do NOT mention, expose or directly output your memory format and mechanism to users."
-        )
+        if memory:
+            prompts.append(memory)
  
         prompts.append(
             "Special Markdown syntax:\n"

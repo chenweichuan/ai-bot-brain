@@ -89,9 +89,7 @@ class AgentService:
         yield { "message_ids": new_msg_ids }
 
         # Prepare memory
-        impression_categories = await self.impression_manager.get_recent_categories()
-        impression_labels = await self.impression_manager.get_mixed_labels()
-        impressions = await self.impression_manager.get_mixed_impressions()
+        memory_context = await self.impression_manager.build_memory_context()
         history = await self.session_manager.get_message_history(
             session_id=session_id, limit=ContextBuilder.MAX_MESSAGES
         )
@@ -109,9 +107,7 @@ class AgentService:
         # Prepare context for LLM
         send_messages = self.context_builder.build_context(
             history=history,
-            impression_categories=impression_categories,
-            impression_labels=impression_labels,
-            impressions=impressions,
+            memory=memory_context,
             instructions=instructions,
             actions=send_actions,
             tools=send_tools,
