@@ -9,6 +9,7 @@ from aiohttp import web
 from aiohttp.web import StreamResponse
 
 from common.log import logger
+from common.redis import RedisClient
 from common.storage import Storage
 from common.tmp_dir import TmpDir
 from scheduler.auto import AutoScheduler
@@ -31,6 +32,9 @@ async def startup(app: web.Application):
     global primitives_service, memory_service, agent_service
     
     logger.info("[API] Initializing services...")
+    
+    # 测试Redis连接
+    await RedisClient.get_instance().ping()
     
     # 初始化Primitives服务
     primitives_service = PrimitivesService()
