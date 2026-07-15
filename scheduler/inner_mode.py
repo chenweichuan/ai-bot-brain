@@ -15,9 +15,9 @@ from memory.session_manager import SessionManager
 from service.agent import AgentService
 
 
-class AutoScheduler:
+class InnerModeScheduler:
     """Auto scheduler for running agent think method with concurrency control"""
-    _instance: Optional['AutoScheduler'] = None
+    _instance: Optional['InnerModeScheduler'] = None
     
     @classmethod
     def get_instance(cls):
@@ -127,6 +127,7 @@ You can:
             async for chunk in self.agent_service.think(
                 session_id=session_id,
                 instructions=instructions,
+                model=conf().get("think_model"),
             ):
                 # Capture and save session_id
                 if "session_id" in chunk:
