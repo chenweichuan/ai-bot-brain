@@ -32,19 +32,23 @@ class ProxyClient:
             logger.info(f"[Proxy] get proxy error: {e}")
         return proxy_api
 
-    async def get_by_proxy(self, target_url, params=None, **kwargs):
-        """Get request via proxy"""
+    async def request_by_proxy(self, method, target_url, params=None, **kwargs):
+        """Make request via proxy"""
         response = None
         try:
             proxy_api = await self.get_proxy()
             if not proxy_api:
                 return
             proxy_url = f"http://{proxy_api}"
-            logger.info(f"[Proxy] get by proxy: {proxy_url}")
+            logger.info(f"[Proxy] {method} by proxy: {proxy_url}")
             async with httpx.AsyncClient(follow_redirects=True, proxy=proxy_url) as client:
-                response = await client.get(target_url, params=params, **kwargs)
+                response = await client.request(method, target_url, params=params, **kwargs)
                 response.raise_for_status()
         except Exception as e:
-            logger.info(f"[Proxy] get by proxy error: {e}")
+            logger.info(f"[Proxy] {method} by proxy error: {e}")
             response = None
         return response
+
+    async def get_by_proxy(self, target_url, params=None, **kwargs):
+        """Get request via proxy"""
+        return await self.request_by_proxy('GET', target_url, params=params, **kwargs)

@@ -3,7 +3,7 @@ import re
 
 from common.log import logger
 from providers.short_link import ShortLinkClient
-from .adapters import TencentWebSearchApi, TencentWebImageSearchApi, SogouWeixin, VolcWebSearchApi, VolcWebImageSearchApi
+from .adapters import TencentWebSearchApi, TencentWebImageSearchApi, VolcWebSearchApi, VolcWebImageSearchApi
 
 
 class WebSearchClient:
@@ -15,9 +15,6 @@ class WebSearchClient:
         default_source_type: [
             TencentWebSearchApi(),
             VolcWebSearchApi(),
-        ],
-        "wechat_official_account_articles": [
-            SogouWeixin(),
         ],
         "image_search": [
             TencentWebImageSearchApi(),

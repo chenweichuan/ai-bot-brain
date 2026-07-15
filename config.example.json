@@ -17,8 +17,8 @@
     "db": 0,
     "password": ""
   },
-  "chat_model": "doubao-seed-lite",
-  "think_model": "doubao-seed-lite",
+  "chat_model": "doubao-seed-turbo",
+  "think_model": "doubao-seed-turbo",
   "inner_mode_model": "doubao-seed-turbo",
   "memory_model": "doubao-seed-lite",
   "image_model": "doubao-seedream",

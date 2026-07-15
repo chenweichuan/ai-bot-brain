@@ -31,21 +31,29 @@ class WebpageScraperClient:
 
         try:
             headers = self.default_headers.copy()
-            # request
+            # First, send a HEAD request to check content type without downloading body
+            try:
+                head_response = await self.proxy_client.request_by_proxy('HEAD', url, headers=headers, timeout=15)
+                if not head_response:
+                    head_response = await asyncio.to_thread(requests.head, url, headers=headers, timeout=15, allow_redirects=True)
+                content_type = head_response.headers.get('Content-Type', '')
+            except:
+                content_type = ''
+            
+            # request with stream to avoid loading large files into memory
             response = await self.proxy_client.get_by_proxy(url, headers=headers, timeout=15)
             if not response:
                 logger.info("[WebScraper] get page by proxy is failed")
-                response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15)
+                response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15, stream=True)
             response.raise_for_status()
             
-            if "image/" in response.headers.get('Content-Type', ''):
-                buffered = io.BytesIO()
-                for block in response.iter_content(1024):
-                    buffered.write(block)
-                buffered.seek(0)
-                file_url = Storage.path_to_url(await Storage.save(buffered))
-                page_content = f"图片：![]({file_url})"
-            else:
+            content_type = response.headers.get('Content-Type', '')
+            if "text/" in content_type or "application/json" in content_type \
+                or "application/xml" in content_type or "application/xhtml" in content_type \
+                or "application/javascript" in content_type or "application/ecmascript" in content_type \
+                or "application/rss" in content_type or "application/atom" in content_type \
+                or "application/x-ndjson" in content_type or "text/markdown" in content_type:
+                # Handle text/web content
                 encoding = chardet.detect(response.content)['encoding']
                 if encoding and encoding.lower().startswith('gb'):
                     page_html = response.content.decode(encoding.lower(), errors='ignore')
@@ -62,6 +70,35 @@ class WebpageScraperClient:
                     except Exception as e:
                         logger.info(f"[WebScraper] get page error: {e}")
                         logger.exception(e)
+            elif "video/" in content_type:
+                buffered = io.BytesIO()
+                for block in response.iter_content(1024):
+                    buffered.write(block)
+                buffered.seek(0)
+                file_url = Storage.path_to_url(await Storage.save(buffered))
+                page_content = f"视频：!video[]({file_url})"
+            elif "audio/" in content_type:
+                buffered = io.BytesIO()
+                for block in response.iter_content(1024):
+                    buffered.write(block)
+                buffered.seek(0)
+                file_url = Storage.path_to_url(await Storage.save(buffered))
+                page_content = f"音频：!audio[]({file_url})"
+            elif "image/" in content_type:
+                buffered = io.BytesIO()
+                for block in response.iter_content(1024):
+                    buffered.write(block)
+                buffered.seek(0)
+                file_url = Storage.path_to_url(await Storage.save(buffered))
+                page_content = f"图片：![]({file_url})"
+            else:
+                # Handle other file types as downloads
+                buffered = io.BytesIO()
+                for block in response.iter_content(1024):
+                    buffered.write(block)
+                buffered.seek(0)
+                file_url = Storage.path_to_url(await Storage.save(buffered))
+                page_content = f"文件：[]({file_url})"
         except Exception as e:
             logger.info(f"[WebScraper] get page error: {e}")
             logger.exception(e)
@@ -80,16 +117,15 @@ class WebpageScraperClient:
             response = await self.proxy_client.get_by_proxy(url, headers=headers, timeout=15)
             if not response:
                 logger.info("[WebScraper] download page by proxy is failed")
-                response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15)
+                response = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15, stream=True)
             response.raise_for_status()
             
-            if "image/" in response.headers.get('Content-Type', ''):
-                buffered = io.BytesIO()
-                for block in response.iter_content(1024):
-                    buffered.write(block)
-                buffered.seek(0)
-                page_content = buffered
-            else:
+            content_type = response.headers.get('Content-Type', '')
+            if "text/" in content_type or "application/json" in content_type \
+                or "application/xml" in content_type or "application/xhtml" in content_type \
+                or "application/javascript" in content_type or "application/ecmascript" in content_type \
+                or "application/rss" in content_type or "application/atom" in content_type \
+                or "application/x-ndjson" in content_type or "text/markdown" in content_type:
                 page_content = response.text
                 text_units = count_text_units(self._strip_tags(page_content))
                 # If direct scraping fails, try using Playwright to render the page
@@ -101,6 +137,13 @@ class WebpageScraperClient:
                     except Exception as e:
                         logger.info(f"[WebScraper] get page error: {e}")
                         logger.exception(e)
+            else:
+                # Handle other file types
+                buffered = io.BytesIO()
+                for block in response.iter_content(1024):
+                    buffered.write(block)
+                buffered.seek(0)
+                page_content = buffered
         except Exception as e:
             logger.info(f"[WebScraper] download page error: {e}")
             logger.exception(e)
