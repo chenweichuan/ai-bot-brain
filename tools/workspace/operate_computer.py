@@ -43,14 +43,14 @@ class OperateComputerTool(Tool):
                         "operation": {
                             "type": "string",
                             "description": "Type of computer operation to perform",
-                            "enum": [
-                                "command", "get_mouse_position",
-                                "mouse_click", "mouse_move", "mouse_scroll",
-                                "mouse_drag", "human_like_mouse_drag",
-                                "type_text", "key_press", "key_hold", "key_release",
-                                "window_activate", "launch_browser", "close_browser",
-                                "capture_desktop", "wait_for_desktop_changes",
-                            ]
+                             "enum": [
+                                 "command", "get_mouse_position",
+                                 "mouse_click", "mouse_move", "mouse_scroll",
+                                 "mouse_drag", "human_like_mouse_drag",
+                                 "type_text", "key_press", "key_hold", "key_release",
+                                 "window_activate",
+                                 "capture_desktop", "wait_for_desktop_changes",
+                             ]
                         },
                         "command": {
                             "type": "string",
@@ -349,24 +349,6 @@ class OperateComputerTool(Tool):
             else:
                 result_text = f"Window activate failed: {stderr_text}"
                 summary = f"❌ Window activate failed: {window_name}"
-        
-        elif operation == "launch_browser":
-            returncode, stdout_text, stderr_text = await self.computer_client.launch_browser(display)
-            if returncode == 0:
-                result_text = f"Browser launched successfully"
-                summary = f"✅ Browser launched"
-            else:
-                result_text = f"Browser launch failed: {stderr_text}"
-                summary = f"❌ Browser launch failed"
-        
-        elif operation == "close_browser":
-            returncode, stdout_text, stderr_text = await self.computer_client.close_browser(display)
-            if returncode == 0:
-                result_text = f"Browser closed successfully"
-                summary = f"✅ Browser closed"
-            else:
-                result_text = f"Browser close failed: {stderr_text}"
-                summary = f"❌ Browser close failed"
         
         elif operation == "capture_desktop":
             # Just return a success message, no need to capture screenshot, 

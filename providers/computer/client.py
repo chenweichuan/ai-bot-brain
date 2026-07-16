@@ -325,15 +325,32 @@ class ComputerClient:
 
     async def launch_browser(self, display: str = None) -> tuple[int, str, str]:
         """Launch browser with remote debugging port"""
-        cmd = f"/usr/bin/chromium-browser --remote-debugging-port=9222 --no-sandbox > /dev/null 2>&1 &"
+        cmd = f"/usr/bin/chromium-browser --remote-debugging-port=9222 " \
+            "--user-data-dir=/opt/witron/chromium_data " \
+            "--start-maximized " \
+            "--test-type " \
+            "--no-first-run " \
+            "--no-default-browser-check " \
+            "--no-sandbox " \
+            "--disable-gpu " \
+            "--disable-software-rasterizer " \
+            "--disable-dev-shm-usage " \
+            "--disable-extensions " \
+            "--mute-audio " \
+            "--disable-background-timer-throttling " \
+            "--disable-backgrounding-occluded-windows " \
+            "--disable-renderer-backgrounding " \
+            "> /dev/null 2>&1 &"
         result = await self.exec_desktop(cmd, 10, display)
         await asyncio.sleep(3)
         return result
 
-    async def close_browser(self, display: str = None) -> tuple[int, str, str]:
+    async def exit_browser(self, display: str = None) -> tuple[int, str, str]:
         """Close browser process"""
-        cmd = f"pkill chromium"
-        return await self.exec_desktop(cmd, 10, display)
+        cmd = f"pkill -f 'remote-debugging-port=9222'"
+        result = await self.exec_desktop(cmd, 10, display)
+        await asyncio.sleep(1)
+        return result
 
     async def connect_browser(self) -> Browser:
         """Connect to browser via CDP, returns browser instance"""

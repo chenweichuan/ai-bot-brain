@@ -1,4 +1,5 @@
 import httpx
+from contextlib import asynccontextmanager
 from common.log import logger
 from config import conf
 
@@ -32,8 +33,42 @@ class ProxyClient:
             logger.info(f"[Proxy] get proxy error: {e}")
         return proxy_api
 
+    @asynccontextmanager
+    async def stream_request_by_proxy(self, method, target_url, params=None, **kwargs):
+        """Make streaming request via proxy with proper context management"""
+        client = None
+        stream_ctx = None
+        try:
+            proxy_api = await self.get_proxy()
+            if not proxy_api:
+                yield None
+                return
+            
+            proxy_url = f"http://{proxy_api}"
+            logger.info(f"[Proxy] {method} streaming by proxy: {proxy_url}")
+            
+            client = httpx.AsyncClient(follow_redirects=True, proxy=proxy_url)
+            stream_ctx = client.stream(method, target_url, params=params, **kwargs)
+            response = await stream_ctx.__aenter__()
+            response.raise_for_status()
+            yield response
+        except Exception as e:
+            logger.info(f"[Proxy] {method} streaming by proxy error: {e}")
+            yield None
+        finally:
+            if stream_ctx:
+                try:
+                    await stream_ctx.__aexit__(None, None, None)
+                except:
+                    pass
+            if client:
+                try:
+                    await client.aclose()
+                except:
+                    pass
+
     async def request_by_proxy(self, method, target_url, params=None, **kwargs):
-        """Make request via proxy"""
+        """Make request via proxy (non-streaming)"""
         response = None
         try:
             proxy_api = await self.get_proxy()
@@ -41,6 +76,7 @@ class ProxyClient:
                 return
             proxy_url = f"http://{proxy_api}"
             logger.info(f"[Proxy] {method} by proxy: {proxy_url}")
+            
             async with httpx.AsyncClient(follow_redirects=True, proxy=proxy_url) as client:
                 response = await client.request(method, target_url, params=params, **kwargs)
                 response.raise_for_status()
@@ -48,7 +84,3 @@ class ProxyClient:
             logger.info(f"[Proxy] {method} by proxy error: {e}")
             response = None
         return response
-
-    async def get_by_proxy(self, target_url, params=None, **kwargs):
-        """Get request via proxy"""
-        return await self.request_by_proxy('GET', target_url, params=params, **kwargs)
