@@ -15,7 +15,8 @@ class ContextBuilder:
     _instance = None
 
     MAX_TEXT_UNITS = 100000
-    MAX_MESSAGES = 50
+    MAX_MESSAGES = 100
+    MAX_MODEL_ROUNDS = 25
 
     @classmethod
     def get_instance(cls):
@@ -70,7 +71,7 @@ class ContextBuilder:
         # Find the last assistant message
         last_assistant_idx = len(messages) - 1 - next((i for i, msg in enumerate(reversed(messages)) if msg["role"] == "assistant"), 0)
 
-        # 如果最后消息不是用户的，则提取最新AI消息之后工具里给出的多媒体资源
+        # 如果最新消息是AI回复的，则提取出该新消息触发的工具里给出的多媒体资源
         if last_assistant_idx > last_user_idx:
             for msg in messages[last_assistant_idx:]:
                 if msg["role"] == "tool" and isinstance(msg["content"], list):
@@ -91,7 +92,7 @@ class ContextBuilder:
             # 只保留有效字段
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
-        # 追加用于多模态对话的资源
+        # 追加最新AI消息工具调用里返回的多媒体资源
         if multimodal_parts:
             multimodal_msg = {
                 "role": "user",
@@ -198,6 +199,11 @@ class ContextBuilder:
 
         # Limit the number of history messages
         recent_history = recent_history[-max_messages:]
+
+        # Limit the number of model rounds
+        all_assistant_idxes = [i for i, msg in enumerate(recent_history) if msg["role"] == "assistant"]
+        if len(all_assistant_idxes) > self.MAX_MODEL_ROUNDS:
+            recent_history = recent_history[all_assistant_idxes[-self.MAX_MODEL_ROUNDS]:]
 
         # Get tool call IDs from call messages
         tool_call_ids_in_call_msgs = []

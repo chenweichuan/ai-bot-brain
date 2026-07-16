@@ -23,7 +23,7 @@ class WriteFileTool(Tool):
             "function": {
                 "name": self.name,
                 "description": "File writer - Write content to a file in small segments. "
-                    f"Access is restricted to: your home (default) and workspace ({self.os_workspace}) directories. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories. "
                     "Priority SHOULD be given to the use of workspace. "
                     "Note: Invoke only when there is a clear need to write file"
                     "⚠️ CRITICAL CHUNKING RULES: "

@@ -34,7 +34,7 @@ class OperateComputerTool(Tool):
             "function": {
                 "name": self.name,
                 "description": f"Operate your computer system running {self.os_distro}. "
-                    f"Access is restricted to: your home (default) and workspace ({self.os_workspace}) directories, and your account ({self.os_user})'s own processes. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories, and your account ({self.os_user})'s own processes. "
                     "Supports system commands, desktop GUI operations, and waiting to view desktop changes. "
                     "All mouse coordinates are based on the desktop screen size.",
                 "parameters": {

@@ -1,7 +1,7 @@
 import base64
 import copy
 import json
-import mimetypes
+import filetype
 import aiofiles
 import httpx
 from common.message import stringify_message_content, truncate_media_urls_for_logging
@@ -50,15 +50,18 @@ class ZhipuaiLlmAdapter(LlmClient):
                                 path = await self._get_cached_tmp_file(part["image"]["url"])
                                 async with aiofiles.open(path, "rb") as f:
                                     bytes = await f.read()
-                                mime, _ = mimetypes.guess_type(path)
-                                mime = mime or "image/png"
+                                # 使用 filetype 验证是图片
+                                kind = filetype.guess(bytes)
+                                if not kind or not kind.mime.startswith('image/'):
+                                    raise ValueError(f"Not a valid image file")
+                                mime = kind.mime
                                 b64 = base64.b64encode(bytes).decode("utf-8")
                                 part["image"]["url"] = f"data:{mime};base64,{b64}"
                             part["type"] = "image_url"
                             part["image_url"] = part["image"]
                             del part["image"]
                         except Exception as e:
-                            logger.error(f"Failed to download or read image: {part['image']['url']}, error: {e}")
+                            logger.error(f"Failed to process image: {part['image']['url']}, error: {e}")
                             part["type"] = "text"
                             part["text"] = f"Image Unavailable: {part['image']['url']}"
                     elif part["type"] == "video":
@@ -69,15 +72,18 @@ class ZhipuaiLlmAdapter(LlmClient):
                                 await compress_video(path, target_size_mb=20)
                                 async with aiofiles.open(path, "rb") as f:
                                     bytes = await f.read()
-                                mime, _ = mimetypes.guess_type(path)
-                                mime = mime or "video/mp4"
+                                # 使用 filetype 验证是视频
+                                kind = filetype.guess(bytes)
+                                if not kind or not kind.mime.startswith('video/'):
+                                    raise ValueError(f"Not a valid video file")
+                                mime = kind.mime
                                 b64 = base64.b64encode(bytes).decode("utf-8")
                                 part["video"]["url"] = f"data:{mime};base64,{b64}"
                             part["type"] = "video_url"
                             part["video_url"] = part["video"]
                             del part["video"]
                         except Exception as e:
-                            logger.error(f"Failed to download or read video: {part['video']['url']}, error: {e}")
+                            logger.error(f"Failed to process video: {part['video']['url']}, error: {e}")
                             part["type"] = "text"
                             part["text"] = f"Video Unavailable: {part['video']['url']}"
                             del part["video"]

@@ -6,7 +6,7 @@ import aiofiles
 
 import httpx
 import base64
-import mimetypes
+import filetype
 
 from common.log import logger
 from common.storage import Storage
@@ -68,8 +68,11 @@ class DoubaoaiT2IAdapter(T2IClient):
                 path = await TmpDir.save(file)
                 async with aiofiles.open(path, "rb") as f:
                     bytes = await f.read()
-                mime, _ = mimetypes.guess_type(path)
-                mime = mime or "image/png"
+                # 使用 filetype 验证是图片
+                kind = filetype.guess(bytes)
+                if not kind or not kind.mime.startswith('image/'):
+                    raise ValueError(f"Not a valid image file")
+                mime = kind.mime
                 b64 = base64.b64encode(bytes).decode("utf-8")
                 payload["image"].append(f"data:{mime};base64,{b64}")
 

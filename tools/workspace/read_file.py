@@ -22,7 +22,7 @@ class ReadFileTool(Tool):
             "function": {
                 "name": self.name,
                 "description": "File reader - Read content from files. "
-                    f"Access is restricted to: your home (default) and workspace ({self.os_workspace}) directories. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories. "
                     "Priority SHOULD be given to the use of workspace.",
                 "parameters": {
                     "type": "object",

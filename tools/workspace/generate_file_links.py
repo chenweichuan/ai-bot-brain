@@ -26,9 +26,9 @@ class GenerateFileLinksTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": f"Generate links for multiple files in the workspace ({self.os_workspace}) directory for easy sharing. "
+                "description": f"Generate links for multiple files for easy sharing. "
                     "The generated links point to snapshotted copies of the target files. "
-                    f"Access is restricted to files within the workspace ({self.os_workspace}) directory only.",
+                    f"Access is restricted to: workspace ({self.os_workspace}) and /tmp directories.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -71,7 +71,7 @@ class GenerateFileLinksTool(Tool):
                     results.append({
                         "file_path": file_path,
                         "status": "failed",
-                        "error": f"Access denied: File must be within workspace directory {self.os_workspace}"
+                        "error": f"Access denied: The file MUST be in the workspace ({self.os_workspace}) or /tmp directory."
                     })
                     fail_count += 1
                     continue

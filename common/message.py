@@ -6,34 +6,18 @@ import math
 
 def truncate_media_urls_for_logging(request: dict) -> dict:
     """
-    Create a copy of the request with media URLs truncated to 500 characters for logging.
-    Truncates image_url and video_url fields in message content.
+    Create a copy of the request with media URLs truncated to 300 characters for logging.
     """
     log_request = copy.deepcopy(request)
     
     if "messages" in log_request:
         for msg in log_request["messages"]:
-            if isinstance(msg.get("content"), list):
-                for part in msg["content"]:
-                    # Truncate image_url urls
-                    if part.get("type") == "image_url" and "image_url" in part:
-                        url = part["image_url"].get("url", "")
-                        if len(url) > 500:
-                            part["image_url"]["url"] = url[:500] + "...[truncated]"
-                    # Truncate video_url urls
-                    if part.get("type") == "video_url" and "video_url" in part:
-                        url = part["video_url"].get("url", "")
-                        if len(url) > 500:
-                            part["video_url"]["url"] = url[:500] + "...[truncated]"
-                    # Also handle the original image/video format (before conversion)
-                    if part.get("type") == "image" and "image" in part:
-                        url = part["image"].get("url", "")
-                        if len(url) > 500:
-                            part["image"]["url"] = url[:500] + "...[truncated]"
-                    if part.get("type") == "video" and "video" in part:
-                        url = part["video"].get("url", "")
-                        if len(url) > 500:
-                            part["video"]["url"] = url[:500] + "...[truncated]"
+            if not isinstance(msg.get("content"), list):
+                continue
+            for part in msg["content"]:
+                for item in part.values():
+                    if isinstance(item, dict) and "url" in item and len(item["url"]) > 300:
+                        item["url"] = item["url"][:300] + "...[truncated]"
     
     return log_request
 
@@ -61,23 +45,6 @@ def stringify_message_content(content: str | list[dict]) -> str:
                 part_type = part.get("type")
                 if part_type == "text":
                     text_segments.append(part.get("text") or "")
-                elif part_type == "image":
-                    url = (part.get("image") or {}).get("url")
-                    text_segments.append(f"![]({url})" if url.startswith("http") else f"image path: {url}")
-                elif part_type == "audio":
-                    url = (part.get("audio") or {}).get("url")
-                    text_segments.append(f"!audio[]({url})" if url.startswith("http") else f"audio path: {url}")
-                elif part_type == "video":
-                    url = (part.get("video") or {}).get("url")
-                    text_segments.append(f"!video[]({url})" if url.startswith("http") else f"video path: {url}")
-                elif part_type == "document":
-                    url = (part.get("document") or {}).get("url")
-                    filename = (part.get("document") or {}).get("filename")
-                    text_segments.append(f"[{filename}]({url})" if url.startswith("http") else f"document ({filename}) path: {url}")
-                elif part_type == "attachment":
-                    url = (part.get("attachment") or {}).get("url")
-                    filename = (part.get("attachment") or {}).get("filename")
-                    text_segments.append(f"[{filename}]({url})" if url.startswith("http") else f"attachment ({filename}) path: {url}")
                 else:
                     text_segments.append(json.dumps(part, ensure_ascii=False))
             except Exception:

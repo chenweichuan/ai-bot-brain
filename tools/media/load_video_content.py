@@ -20,17 +20,13 @@ class LoadVideoContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load video content from local file paths or remote URLs, support video-related interaction scenarios.",
+                "description": "Load video content from local file path or remote URL, support video-related interaction scenarios.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "input": {
-                            "type": "array",
-                            "description": "List of local video file paths or remote video URLs, up to 3 items.",
-                            "items": {
-                                "type": "string",
-                                "description": "Local video file path or remote video URL"
-                            }
+                            "type": "string",
+                            "description": "Local video file path or remote video URL."
                         },
                     },
                     "required": ["input"],
@@ -44,16 +40,14 @@ class LoadVideoContentTool(Tool):
         input = tool_args.get("input")
         
         # Format video data
-        content = []
-        for input_item in input:
-            content.append({
-                "type": "video",
-                "video": {
-                    "url": input_item,
-                    "detail": "low",
-                },
-            })
+        content = [{
+            "type": "video",
+            "video": {
+                "url": input,
+                "detail": "low",
+            },
+        }]
         
-        summary = f"✅ Successfully prepared {len(input)} video(s)."
+        summary = f"✅ Successfully prepared 1 video."
         
         return (content, summary)

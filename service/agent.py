@@ -311,16 +311,11 @@ class AgentService:
 
         # Check if we should continue thinking
         should_continue = False
-        tool_call_names = [t["function"]["name"] for t in bot_message["tool_calls"] or []]
-        if FlowWaitForInputTool.name in tool_call_names:
-            # If FlowWaitForInputTool is called, we should stop thinking and wait for user input
-            should_continue = False
-        elif FlowCompleteTool.name in tool_call_names:
-            # If FlowCompleteTool is called, we should stop thinking
-            should_continue = False
-        elif bot_message["tool_calls"]:
-            # If there are any other tool calls, we should continue thinking
-            should_continue = True
+        if bot_message["tool_calls"]:
+            # If there are tool calls (except wait input and complete), we should continue thinking
+            tool_call_names = [t["function"]["name"] for t in bot_message["tool_calls"] or []]
+            should_continue = FlowWaitForInputTool.name not in tool_call_names \
+                and FlowCompleteTool.name not in tool_call_names
         elif bot_message["finish_reason"] != "stop" and bot_message.get("content"):
             # If LLM did not stop and there is content, it may indicate that the LLM wants to continue thinking
             should_continue = True
@@ -341,8 +336,8 @@ class AgentService:
                 thinking=thinking,
                 temperature=temperature,
                 top_p=top_p,
-                max_text_units=ContextBuilder.MAX_TEXT_UNITS,
-                max_messages=ContextBuilder.MAX_MESSAGES,
+                max_text_units=max_text_units,
+                max_messages=max_messages,
                 depth=depth + 1,
                 max_depth=max_depth,
                 active_time=active_time,
