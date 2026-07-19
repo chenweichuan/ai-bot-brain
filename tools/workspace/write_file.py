@@ -63,7 +63,6 @@ class WriteFileTool(Tool):
         file_path = tool_args.get("file_path")
         mode = tool_args.get("mode")
         content = tool_args.get("content", "")
-        preview = content[:50].replace('\n', ' ') + '...' if len(content) > 50 else content.replace('\n', ' ')
 
         # Validate mode
         if mode not in ["start", "append"]:
@@ -94,7 +93,7 @@ class WriteFileTool(Tool):
             result = f"File written successfully:\n\n" \
                 f"  Path: {file_path}\n" \
                 f"  Mode: {mode}\n"
-            summary = f"✅ Successfully {'appended to' if mode == 'append' else 'overwrote'} file ({file_path}): {preview}"
+            summary = f"✅ Successfully {'appended to' if mode == 'append' else 'overwrote'} file ({file_path})"
 
             return (f"{result}\n\nNote: The above is the result of your file write operation.", summary)
         except Exception as e:

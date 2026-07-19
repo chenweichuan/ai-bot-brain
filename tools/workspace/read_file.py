@@ -57,9 +57,8 @@ class ReadFileTool(Tool):
                 summary = f"❌ Failed to read file ({file_path}): {stdout[:100]} {stderr[:100]}".replace('\n', ' ')
                 return (error_msg, summary)
 
-            preview = stdout[:50].replace('\n', ' ') + '...' if len(stdout) > 50 else stdout.replace('\n', ' ')
             result = f"File content:\n\n{stdout}"
-            summary = f"✅ Successfully read file ({file_path}): {preview}"
+            summary = f"✅ Successfully read file ({file_path})."
 
             return (result, summary)
         except Exception as e:

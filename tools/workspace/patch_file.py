@@ -138,14 +138,12 @@ class PatchFileTool(Tool):
                 summary = f"❌ Failed to read file ({file_path}): {stdout[:100]} {stderr[:100]}".replace('\n', ' ')
                 return (error_msg, summary)
 
-            preview = stdout[:50].replace('\n', ' ') + '...' if len(stdout) > 50 else stdout.replace('\n', ' ')
-
             if mode == "patch":
                 result = f"File patched successfully, updated content with line numbers:\n\n{stdout}"
                 summary = f"✅ Successfully patched file ({file_path}): lines {start_line}-{end_line} replaced"
             else: # start mode
                 result = f"File content with line numbers:\n\n{stdout}"
-                summary = f"✅ Successfully read file with line numbers ({file_path}): {preview}"
+                summary = f"✅ Successfully read file with line numbers ({file_path})."
 
             return (f"{result}\n\nNote: The above shows the file content with {'new' if mode == 'patch' else 'original'} precise line numbers.", summary)
         except Exception as e:
