@@ -1,7 +1,7 @@
 import qrcode
 import cv2
 import io
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.log import logger
 from common.tmp_dir import TmpDir
 
@@ -53,7 +53,7 @@ class QrcodeClient:
             img_byte_arr = img_byte_arr.getvalue()
             
             # 保存到Storage并返回URL
-            result = Storage.path_to_url(await Storage.save(img_byte_arr))
+            result = StorageClient.path_to_url(await StorageClient.save(img_byte_arr))
         except Exception as e:
             logger.info("[QRCode] generate_qrcodes error: {}".format(e))
             logger.exception(e)

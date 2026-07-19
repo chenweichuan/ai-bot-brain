@@ -8,7 +8,7 @@ import chardet
 from common.log import logger
 from common.message import count_text_units
 from common.proxy import ProxyClient
-from common.storage import Storage
+from providers.storage.client import StorageClient
 
 
 class WebpageScraperClient:
@@ -129,7 +129,7 @@ class WebpageScraperClient:
                     page_html = content
                 return self._strip_tags(page_html)
             else:
-                file_url = Storage.path_to_url(await Storage.save(content))
+                file_url = StorageClient.path_to_url(await StorageClient.save(content))
                 if "video/" in content_type:
                     return f"!video[]({file_url})"
                 elif "audio/" in content_type:

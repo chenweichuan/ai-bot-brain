@@ -58,7 +58,7 @@ class AgentService:
         username: str = None,
         session_id: str = None,
         messages: List[Dict[str, Any]] = [],
-        model: str = conf().get("think_model"),
+        model: str = conf().get("chat_model"),
         instructions: str = "",
         actions: List[Dict[str, str]] = [],
         tools: List[Dict[str, Any]] = [],
@@ -74,6 +74,8 @@ class AgentService:
         """
         Main thinking loop that handles tools calling and recursion
         """
+        model = model if model != "default" else conf().get("chat_model")
+        
         # Prepare session
         session_id = await self._prepare_session(username, session_id)
         yield { "session_id": session_id }

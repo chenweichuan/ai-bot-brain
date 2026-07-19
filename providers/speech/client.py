@@ -6,7 +6,7 @@ import whisper
 import soundfile as sf
 import sherpa_onnx
 import opencc
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.log import logger
 from common.tmp_dir import TmpDir
 from config import conf
@@ -122,8 +122,8 @@ class SpeechClient:
             )
             
             # 保存到Storage并返回URL
-            audio_path = await Storage.save(tmp_path)
-            result = Storage.path_to_url(audio_path)
+            audio_path = await StorageClient.save(tmp_path)
+            result = StorageClient.path_to_url(audio_path)
             
             # 清理临时文件
             os.unlink(tmp_path)

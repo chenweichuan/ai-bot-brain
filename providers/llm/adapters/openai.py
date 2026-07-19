@@ -1,18 +1,12 @@
-import base64
 import copy
 import json
-import filetype
-import aiofiles
 import httpx
 from common.message import stringify_message_content, truncate_media_urls_for_logging
-from common.tmp_dir import TmpDir
-from common.video import compress_video
 from providers.llm.client import LlmClient
 from common.log import logger
 from config import conf
 
-API_BASE = conf().get("openai_api_base", "")
-API_KEY = conf().get("openai_api_key", "")
+API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "openai"), {})
 
 class OpenaiLlmAdapter(LlmClient):
     _instance = None
@@ -43,16 +37,7 @@ class OpenaiLlmAdapter(LlmClient):
                     if part["type"] == "image":
                         try:
                             if not part["image"]["url"].startswith("data:"):
-                                path = await self._get_cached_tmp_file(part["image"]["url"])
-                                async with aiofiles.open(path, "rb") as f:
-                                    bytes = await f.read()
-                                # 使用 filetype 验证是图片
-                                kind = filetype.guess(bytes)
-                                if not kind or not kind.mime.startswith('image/'):
-                                    raise ValueError(f"Not a valid image file")
-                                mime = kind.mime
-                                b64 = base64.b64encode(bytes).decode("utf-8")
-                                part["image"]["url"] = f"data:{mime};base64,{b64}"
+                                part["image"]["url"] = await self._get_base64_data_url(part["image"]["url"], "image")
                             part["type"] = "image_url"
                             part["image_url"] = part["image"]
                             del part["image"]
@@ -60,21 +45,11 @@ class OpenaiLlmAdapter(LlmClient):
                             logger.error(f"Failed to process image: {part['image']['url']}, error: {e}")
                             part["type"] = "text"
                             part["text"] = f"Image Unavailable: {part['image']['url']}"
+                            del part["image"]
                     elif part["type"] == "video":
                         try:
                             if not part["video"]["url"].startswith("data:"):
-                                path = await self._get_cached_tmp_file(part["video"]["url"])
-                                # 检查视频大小，如果超过指定大小则压缩
-                                await compress_video(path, target_size_mb=20)
-                                async with aiofiles.open(path, "rb") as f:
-                                    bytes = await f.read()
-                                # 使用 filetype 验证是视频
-                                kind = filetype.guess(bytes)
-                                if not kind or not kind.mime.startswith('video/'):
-                                    raise ValueError(f"Not a valid video file")
-                                mime = kind.mime
-                                b64 = base64.b64encode(bytes).decode("utf-8")
-                                part["video"]["url"] = f"data:{mime};base64,{b64}"
+                                part["video"]["url"] = await self._get_base64_data_url(part["video"]["url"], "video")
                             part["type"] = "video_url"
                             part["video_url"] = part["video"]
                             del part["video"]
@@ -97,7 +72,7 @@ class OpenaiLlmAdapter(LlmClient):
             del request["top_p"]
 
         headers = {
-            "Authorization": f"Bearer {API_KEY}",
+            "Authorization": f"Bearer {API_CONFIG['api_key']}",
             "Content-Type": "application/json"
         }
 
@@ -110,7 +85,7 @@ class OpenaiLlmAdapter(LlmClient):
                     try:
                         async with client.stream(
                             "POST",
-                            f"{API_BASE}/chat/completions",
+                            f"{API_CONFIG['api_base']}/chat/completions",
                             headers=headers,
                             json=request,
                             timeout=600.0
@@ -134,7 +109,7 @@ class OpenaiLlmAdapter(LlmClient):
             async with httpx.AsyncClient() as client:
                 try:
                     response = await client.post(
-                        f"{API_BASE}/chat/completions",
+                        f"{API_CONFIG['api_base']}/chat/completions",
                         headers=headers,
                         json=request,
                         timeout=600.0

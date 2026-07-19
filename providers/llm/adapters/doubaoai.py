@@ -1,25 +1,13 @@
-import base64
 import copy
 import json
-import filetype
-import time
-import aiofiles
 import httpx
 from common.message import stringify_message_content, truncate_media_urls_for_logging
-from common.tmp_dir import TmpDir
-from common.video import compress_video
 from providers.llm.client import LlmClient
 from common.log import logger
 from config import conf
 
-API_BASE = conf().get("doubaoai_api_base", "")
-API_KEY = conf().get("doubaoai_api_key", "")
+API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "doubaoai"), {})
 
-MODEL_ENDPOINT_REF = {
-    "doubao-seed-lite": "doubao-seed-2-0-lite-260428",
-    "doubao-seed-turbo": "doubao-seed-2-1-turbo-260628",
-    "doubao-seed-pro": "doubao-seed-2-1-pro-260628",
-}
 
 class DoubaoaiLlmAdapter(LlmClient):
     _instance = None
@@ -44,16 +32,7 @@ class DoubaoaiLlmAdapter(LlmClient):
                     if part["type"] == "image":
                         try:
                             if not part["image"]["url"].startswith("data:"):
-                                path = await self._get_cached_tmp_file(part["image"]["url"])
-                                async with aiofiles.open(path, "rb") as f:
-                                    bytes = await f.read()
-                                # 使用 filetype 验证是图片
-                                kind = filetype.guess(bytes)
-                                if not kind or not kind.mime.startswith('image/'):
-                                    raise ValueError(f"Not a valid image file")
-                                mime = kind.mime
-                                b64 = base64.b64encode(bytes).decode("utf-8")
-                                part["image"]["url"] = f"data:{mime};base64,{b64}"
+                                part["image"]["url"] = await self._get_base64_data_url(part["image"]["url"], "image")
                             part["type"] = "image_url"
                             part["image_url"] = part["image"]
                             del part["image"]
@@ -65,18 +44,7 @@ class DoubaoaiLlmAdapter(LlmClient):
                     elif part["type"] == "video":
                         try:
                             if not part["video"]["url"].startswith("data:"):
-                                path = await self._get_cached_tmp_file(part["video"]["url"])
-                                # 检查视频大小，如果超过指定大小则压缩
-                                await compress_video(path, target_size_mb=20)
-                                async with aiofiles.open(path, "rb") as f:
-                                    bytes = await f.read()
-                                # 使用 filetype 验证是视频
-                                kind = filetype.guess(bytes)
-                                if not kind or not kind.mime.startswith('video/'):
-                                    raise ValueError(f"Not a valid video file")
-                                mime = kind.mime
-                                b64 = base64.b64encode(bytes).decode("utf-8")
-                                part["video"]["url"] = f"data:{mime};base64,{b64}"
+                                part["video"]["url"] = await self._get_base64_data_url(part["video"]["url"], "video")
                             part["type"] = "video_url"
                             part["video_url"] = part["video"]
                             del part["video"]
@@ -96,11 +64,8 @@ class DoubaoaiLlmAdapter(LlmClient):
                 "type": "disabled"
             }
 
-        # 模型名称映射
-        request["model"] = MODEL_ENDPOINT_REF.get(request["model"], request["model"])
-
         headers = {
-            "Authorization": f"Bearer {API_KEY}",
+            "Authorization": f"Bearer {API_CONFIG['api_key']}",
             "Content-Type": "application/json"
         }
 
@@ -113,7 +78,7 @@ class DoubaoaiLlmAdapter(LlmClient):
                     try:
                         async with client.stream(
                             "POST",
-                            f"{API_BASE}/chat/completions",
+                            f"{API_CONFIG['api_base']}/chat/completions",
                             headers=headers,
                             json=request,
                             timeout=600.0
@@ -140,7 +105,7 @@ class DoubaoaiLlmAdapter(LlmClient):
             async with httpx.AsyncClient() as client:
                 try:
                     response = await client.post(
-                        f"{API_BASE}/chat/completions",
+                        f"{API_CONFIG['api_base']}/chat/completions",
                         headers=headers,
                         json=request,
                         timeout=600.0
@@ -160,7 +125,7 @@ class DoubaoaiLlmAdapter(LlmClient):
     async def _upload_file(self, params: dict[str, any]) -> str:
         """上传文件到豆包并返回 file_id"""
         upload_headers = {
-            "Authorization": f"Bearer {API_KEY}"
+            "Authorization": f"Bearer {API_CONFIG['api_key']}"
         }
         
         async with httpx.AsyncClient() as client:
@@ -170,7 +135,7 @@ class DoubaoaiLlmAdapter(LlmClient):
                 data = {k: v for k, v in params.items() if k != "file"}
                 
                 upload_response = await client.post(
-                    f"{API_BASE}/files",
+                    f"{API_CONFIG['api_base']}/files",
                     headers=upload_headers,
                     files=files,
                     data=data,

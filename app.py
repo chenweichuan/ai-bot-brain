@@ -10,7 +10,7 @@ from aiohttp.web import StreamResponse
 
 from common.log import logger
 from common.redis import RedisClient
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.tmp_dir import TmpDir
 from scheduler.inner_mode import InnerModeScheduler
 from service.memory import MemoryService
@@ -175,7 +175,7 @@ async def health_check(request: web.Request) -> web.Response:
 
 async def upload(request: web.Request):
     file_path = await _get_post_file_path(request)
-    file_url = Storage.path_to_url(await Storage.save(file_path))
+    file_url = StorageClient.path_to_url(await StorageClient.save(file_path))
     return web.Response(text=file_url)
 
 
@@ -272,7 +272,7 @@ async def text_to_speech(request: web.Request) -> web.Response:
         # Handle result based on type
         if isinstance(result, str) and result.endswith('.wav'):
             # Voice file path - convert to URL
-            voice_url = Storage.path_to_url(await Storage.save(result))
+            voice_url = StorageClient.path_to_url(await StorageClient.save(result))
             return web.Response(text=result)
         else:
             # Error message or other result

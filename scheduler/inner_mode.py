@@ -127,7 +127,7 @@ You can:
             async for chunk in self.agent_service.think(
                 session_id=session_id,
                 instructions=instructions,
-                model=conf().get("think_model"),
+                model=conf().get("chat_model"),
             ):
                 # Capture and save session_id
                 if "session_id" in chunk:

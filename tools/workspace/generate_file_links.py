@@ -4,7 +4,7 @@ import os
 from typing import Dict, Any, List
 from tools.base import Tool
 from providers.computer.client import ComputerClient
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.log import logger
 from providers.short_link.client import ShortLinkClient
 
@@ -98,7 +98,7 @@ class GenerateFileLinksTool(Tool):
 
                 
                 # Convert file path to storage URL
-                storage_url = Storage.path_to_url(await Storage.save(file_path))
+                storage_url = StorageClient.path_to_url(await StorageClient.save(file_path))
                 
                 # Generate short link
                 short_link = await self.shortlink_client.convert_link_to_short(storage_url)
@@ -135,7 +135,7 @@ class GenerateFileLinksTool(Tool):
                 result_lines.append(f"   Error: {res['error']}\n")
         
         result = "\n".join(result_lines)
-        summary = f"✅ Generated snapshot links for {success_count} files successfully"
+        summary = f"{'✅' if not fail_count else '❌'} Generated snapshot links for {success_count} files successfully"
         summary += f", {fail_count} files failed" if fail_count > 0 else ""
         
         return (result, summary)

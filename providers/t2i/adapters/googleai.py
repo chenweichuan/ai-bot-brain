@@ -9,16 +9,15 @@ import base64
 import filetype
 
 from common.log import logger
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.tmp_dir import TmpDir
 from common.token_bucket import TokenBucket
 from providers.t2i.client import T2IClient
 from config import conf
 
 
-MODEL_ENDPOINT_REF = {
-  "gemini-3-pro-image": "gemini-3-pro-image-preview",
-}
+API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "googleai"), {})
+
 
 class GoogleaiT2IAdapter(T2IClient):
     _instance = None
@@ -32,10 +31,9 @@ class GoogleaiT2IAdapter(T2IClient):
     
     def __init__(self) -> None:
         super().__init__()
-        self.api_base = conf().get("googleai_api_base")
         self.headers = {
             "Content-Type": "application/json",
-            "x-goog-api-key": conf().get("googleai_api_key"),
+            "x-goog-api-key": API_CONFIG["api_key"],
         }
         if conf().get("rate_limit_image"):
             self.tb4image = TokenBucket(conf().get("rate_limit_image", 50))
@@ -50,9 +48,7 @@ class GoogleaiT2IAdapter(T2IClient):
         else:
             logger.info("[GoogleAI] text_to_image prompt={}".format(text))
 
-        model = MODEL_ENDPOINT_REF.get(model, model)
-
-        endpoint = f"{self.api_base}/models/{model}:generateContent"
+        endpoint = f"{API_CONFIG['api_base']}/models/{model}:generateContent"
 
         payload = {
             "contents": [{
@@ -87,7 +83,7 @@ class GoogleaiT2IAdapter(T2IClient):
                 async with httpx.AsyncClient() as client:
                     response = await client.post(endpoint, json=payload, headers=self.headers, timeout=120)
                 image_bytes = base64.b64decode(response.json()["candidates"][0]["content"]["parts"][0]["inlineData"]["data"])
-                result = Storage.path_to_url(await Storage.save(image_bytes))
+                result = StorageClient.path_to_url(await StorageClient.save(image_bytes))
                 break
             except Exception as e:
                 retry_cnt -= 1

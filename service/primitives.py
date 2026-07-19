@@ -41,6 +41,7 @@ class PrimitivesService:
         """
         LLM对话接口
         """
+        model = model if model != "default" else conf().get("chat_model")
         logger.info(f"[Primitives] LLM chat: {model}")
         return await LlmClient.factory(model).chat(model=model, **request)
 
@@ -50,6 +51,7 @@ class PrimitivesService:
         """
         T2I图片生成接口
         """
+        model = model if model != "default" else conf().get("image_model")
         logger.info(f"[Primitives] T2I generate: {model}")
         return await T2IClient.factory(model).generate(**request)
 

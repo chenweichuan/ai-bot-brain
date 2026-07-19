@@ -17,20 +17,41 @@
     "db": 0,
     "password": ""
   },
-  "chat_model": "doubao-seed-lite",
-  "think_model": "doubao-seed-lite",
-  "inner_mode_model": "doubao-seed-turbo",
-  "memory_model": "doubao-seed-lite",
-  "image_model": "doubao-seedream",
-  "rate_limit_image": 2,
-  "doubaoai_api_base": "https://ark.cn-beijing.volces.com/api/v3",
-  "doubaoai_api_key": "your_doubaoai_api_key",
-  "zhipuai_api_base": "https://open.bigmodel.cn/api/paas/v4",
-  "zhipuai_api_key": "your_zhipuai_api_key",
-  "googleai_api_base": "https://generativelanguage.googleapis.com/v1beta",
-  "googleai_api_key": "your_googleai_api_key",
-  "openai_api_base": "https://api.openai.com/v1",
-  "openai_api_key": "your_openai_api_key",
+  "chat_model": "doubao-seed-2.0-lite",
+  "inner_mode_model": "doubao-seed-2.0-lite",
+  "memory_model": "doubao-seed-2.0-lite",
+  "image_model": "doubao-seedream-5.0-lite",
+  "rate_limit_image": 5,
+  "model_providers": [
+    {
+      "name": "doubaoai",
+      "api_base": "https://ark.cn-beijing.volces.com/api/v3",
+      "api_key": "your_doubaoai_api_key",
+      "prefixes": ["doubao-", "ep-"]
+    },
+    {
+      "name": "zhipuai",
+      "api_base": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key": "your_zhipuai_api_key",
+      "prefixes": ["glm-"],
+      "vision_fallback": {
+        "glm-4.7": "glm-4.6v",
+        "glm-5.2": "glm-5v-turbo"
+      }
+    },
+    {
+      "name": "googleai",
+      "api_base": "https://generativelanguage.googleapis.com/v1beta",
+      "api_key": "your_googleai_api_key",
+      "prefixes": ["gemini-"]
+    },
+    {
+      "name": "openai",
+      "api_base": "https://api.openai.com/v1",
+      "api_key": "your_openai_api_key",
+      "prefixes": ["gpt-"]
+    }
+  ],
   "content_moderation": {
     "enabled": true,
     "provider": "aliyun",

@@ -9,16 +9,15 @@ import base64
 import filetype
 
 from common.log import logger
-from common.storage import Storage
+from providers.storage.client import StorageClient
 from common.tmp_dir import TmpDir
 from common.token_bucket import TokenBucket
 from providers.t2i.client import T2IClient
 from config import conf
 
 
-MODEL_ENDPOINT_REF = {
-  "doubao-seedream": "doubao-seedream-5-0-260128",
-}
+API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "doubaoai"), {})
+
 
 class DoubaoaiT2IAdapter(T2IClient):
     _instance = None
@@ -32,10 +31,10 @@ class DoubaoaiT2IAdapter(T2IClient):
     
     def __init__(self) -> None:
         super().__init__()
-        self.endpoint = f"{conf().get('doubaoai_api_base')}/images/generations"
+        self.endpoint = f"{API_CONFIG['api_base']}/images/generations"
         self.headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {conf().get('doubaoai_api_key')}",
+            "Authorization": f"Bearer {API_CONFIG['api_key']}",
         }
         if conf().get("rate_limit_image"):
             self.tb4image = TokenBucket(conf().get("rate_limit_image", 50))
@@ -49,8 +48,6 @@ class DoubaoaiT2IAdapter(T2IClient):
             logger.info("[DoubaoAI] image_to_image prompt={}, images_count={}".format(text, len(image_files)))
         else:
             logger.info("[DoubaoAI] text_to_image prompt={}".format(text))
-
-        model = MODEL_ENDPOINT_REF.get(model, model)
 
         payload = {
             "model": model,
@@ -83,7 +80,7 @@ class DoubaoaiT2IAdapter(T2IClient):
                 async with httpx.AsyncClient() as client:
                     response = await client.post(self.endpoint, json=payload, headers=self.headers, timeout=120)
                 image_bytes = base64.b64decode(response.json()["data"][0]["b64_json"])
-                result = Storage.path_to_url(await Storage.save(image_bytes))
+                result = StorageClient.path_to_url(await StorageClient.save(image_bytes))
                 break
             except Exception as e:
                 retry_cnt -= 1

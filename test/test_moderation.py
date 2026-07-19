@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
 import asyncio
-from common.content_moderation.client import ContentModerationClient
+from providers.content_moderation.client import ContentModerationClient
 content_moderation = ContentModerationClient.get_instance()
 
 
