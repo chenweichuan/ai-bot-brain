@@ -42,7 +42,6 @@ class ScrapeWebpageTool(Tool):
         tool_args = json.loads(arguments)
         url = tool_args.get("url")
         result = await self.web_scraper_client.scrape(url=url)
-        preview = result[:100].replace('\n', ' ') + '...' if len(result) > 100 else result.replace('\n', ' ')
         
         content = ""
 
@@ -56,7 +55,7 @@ class ScrapeWebpageTool(Tool):
             content += f"Webpage {url} content:\n\n"
             content += f"{result}\n\n"
             content += "Note: Reply with reference to the fetched webpage content above."
-            summary = f"✅ Successfully scraped webpage content: {preview}"
+            summary = f"✅ Successfully scraped webpage content from url ({url})"
         else:
             content = f"Failed to fetch webpage content from url ({url})"
             summary = f"❌ {content}"
