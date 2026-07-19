@@ -16,13 +16,13 @@ class T2IClient:
     def factory(model: str):
         """工厂方法，根据模型名称返回对应的适配器实例"""
         from providers.t2i.adapters import (
-            DoubaoaiLlmAdapter,
+            DoubaoaiT2IAdapter,
             GoogleaiT2IAdapter,
         )
 
         # provider名称到适配器类的映射
         provider_adapter_map = {
-            "doubaoai": DoubaoaiLlmAdapter,
+            "doubaoai": DoubaoaiT2IAdapter,
             "googleai": GoogleaiT2IAdapter,
         }
 
