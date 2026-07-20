@@ -2,10 +2,11 @@ import base64
 import hashlib
 import aiofiles
 import filetype
+import os
+import asyncio
 from collections import OrderedDict
 
 from common.tmp_dir import TmpDir
-from common.video import compress_video
 from common.log import logger
 from config import conf
 
@@ -53,6 +54,107 @@ class LlmClient:
 
     async def chat(self, request):
         raise NotImplementedError
+    
+    async def _compress_video(self, input_path: str, compress_threshold_mb: int = 30) -> None:
+        """
+        如果视频超过指定大小（MB）则压缩，直接覆盖原文件
+        注意：compress_threshold_mb 是压缩触发阈值，不是精确目标大小
+        抛出异常表示压缩失败
+        """
+        # Validate input file exists
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(f"Input file not found: {input_path}")
+        
+        threshold_bytes = compress_threshold_mb * 1024 * 1024
+        input_size = os.path.getsize(input_path)
+        
+        if input_size <= threshold_bytes:
+            logger.info(f"Video already under threshold: {input_size / 1024 / 1024:.2f}MB <= {compress_threshold_mb}MB")
+            return
+        
+        logger.info(f"Compressing video: {input_path}, size: {input_size / 1024 / 1024:.2f}MB (threshold: {compress_threshold_mb}MB)")
+        
+        # Get video duration
+        duration_cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            input_path
+        ]
+        duration_proc = await asyncio.create_subprocess_exec(
+            *duration_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        duration_stdout, duration_stderr = await duration_proc.communicate()
+        if duration_proc.returncode != 0:
+            raise RuntimeError(f"Failed to get video duration: {duration_stderr.decode()}")
+        
+        duration_str = duration_stdout.decode().strip()
+        if not duration_str:
+            raise RuntimeError("Invalid video duration (empty output)")
+        
+        duration = float(duration_str)
+        if duration <= 0:
+            raise RuntimeError(f"Invalid video duration: {duration}")
+        
+        # Single pass compression (approximate, not exact size target)
+        current_bitrate_factor = 0.9
+        target_bitrate = int((threshold_bytes * current_bitrate_factor * 8) / duration)
+        logger.info(f"Compressing video, target bitrate: {target_bitrate} bps")
+        
+        ext = os.path.splitext(input_path)[1]
+        temp_output_path = input_path.replace(ext, f"_temp{ext}")
+        
+        try:
+            # Compress video with specified video codec
+            compress_cmd = [
+                "ffmpeg",
+                "-i", input_path,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-r", "25",
+                "-b:v", str(target_bitrate),
+                "-bufsize", str(target_bitrate * 2),
+                "-maxrate", str(int(target_bitrate * 1.5)),
+                "-c:a", "aac",
+                "-b:a", "16k",
+                "-ac", "1",
+                "-ar", "16000",
+                "-y",
+                "-vf", "scale='min(1280,iw)':-2",
+                temp_output_path
+            ]
+            
+            compress_proc = await asyncio.create_subprocess_exec(
+                *compress_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, compress_stderr = await compress_proc.communicate()
+            
+            if compress_proc.returncode != 0:
+                raise RuntimeError(f"FFmpeg compression failed: {compress_stderr.decode()}")
+            
+            # Check compressed file size
+            if not os.path.exists(temp_output_path):
+                raise RuntimeError("Temp output file not created")
+            
+            output_size = os.path.getsize(temp_output_path)
+            logger.info(f"Compressed size: {output_size / 1024 / 1024:.2f}MB")
+            
+            # Replace original file regardless of size (single pass only)
+            os.replace(temp_output_path, input_path)
+            logger.info(f"Video compressed successfully: {input_path}")
+            
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_output_path):
+                try:
+                    os.remove(temp_output_path)
+                except Exception as e:
+                    logger.warning(f"Failed to remove temp file {temp_output_path}: {e}")
     
     async def _get_cached_tmp_file(self, source: str) -> str:
         """
@@ -110,7 +212,7 @@ class LlmClient:
         
         if media_type == "video":
             # 检查视频大小，如果超过指定大小则压缩
-            await compress_video(path, target_size_mb=20)
+            await self._compress_video(path)
         async with aiofiles.open(path, "rb") as f:
             raw_bytes = await f.read()
         # 使用 filetype 验证文件类型
