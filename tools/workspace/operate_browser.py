@@ -56,9 +56,9 @@ class OperateBrowserTool(Tool):
                         },
                         "tab_index": {"type": "integer", "description": "Tab index to switch to or close, required for switch_tab/close_tab operations"},
                         "url": {"type": "string", "description": "Target URL to navigate to, required only when operation=goto"},
-                        "selector": {"type": "string", "description": "CSS selector, required for wait/upload operations"},
+                        "selector": {"type": "string", "description": "CSS selector, optional for wait operation, required for upload operation"},
                         "script": {"type": "string", "description": "JavaScript code to execute, required for evaluate operation"},
-                        "timeout": {"type": "integer", "description": "Timeout in milliseconds, optional for wait operation, default 5000", "default": 5000},
+                        "timeout": {"type": "integer", "description": "Timeout in seconds, optional for wait operation", "default": 5},
                         "file_path": {"type": "string", "description": "Local file path to upload, required for upload operation"},
                         "state": {"type": "string", "description": "Wait state: visible, hidden, attached, detached, default visible", "default": "visible"}
                     },
@@ -97,10 +97,7 @@ class OperateBrowserTool(Tool):
             else:
                 browser = await self.computer_client.connect_browser()
                 _pages = await self.computer_client.get_browser_pages()
-                
-                page = get_current_page() if operation not in [
-                    "new_tab", "switch_tab", "list_tabs", "close_tab"
-                ] else None
+                page = get_current_page()
                 
                 if operation == "new_tab":
                     contexts = browser.contexts
@@ -159,13 +156,14 @@ class OperateBrowserTool(Tool):
                     result = f"✅ Browser evaluated JavaScript successfully, result: {eval_result}."
                     summary = f"✅ Browser evaluated JavaScript successfully."
                 elif operation == "wait":
+                    timeout = tool_args.get("timeout", 5)
                     selector = tool_args.get("selector")
-                    if not selector:
-                        raise Exception("Selector is required for wait operation")
-                    timeout = tool_args.get("timeout", 5000)
                     state = tool_args.get("state", "visible")
-                    await page.wait_for_selector(selector, timeout=timeout, state=state)
-                    result = summary = f"✅ Waited for element {selector} to be {state} successfully."
+                    if selector:
+                        await page.wait_for_selector(selector, timeout=timeout*1000, state=state)
+                    else:
+                        await asyncio.sleep(timeout)
+                    result = summary = f"✅ Waited for element{' ' + selector if selector else ''} to be {state} successfully."
                 elif operation == "upload":
                     selector = tool_args.get("selector")
                     if not selector:

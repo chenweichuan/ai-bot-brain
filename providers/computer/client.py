@@ -354,12 +354,25 @@ class ComputerClient:
 
     async def connect_browser(self) -> Browser:
         """Connect to browser via CDP, returns browser instance"""
-        if not self._browser:
-            if not self._pw:
-                self._pw = await async_playwright().start()
-            logger.info(f"[ComputerClient] Connecting to browser via CDP: {self._cdp_url}")
-            self._browser = await self._pw.chromium.connect_over_cdp(self._cdp_url)
-            logger.info(f"[ComputerClient] Browser connected successfully")
+        try:
+            # Check if browser connection is still valid
+            if self._browser:
+                # Use is_connected() method to verify connection status
+                if self._browser.is_connected():
+                    return self._browser
+                logger.warning(f"[ComputerClient] Browser connection closed, reconnecting...")
+                self._browser = None
+        except Exception:
+            logger.warning(f"[ComputerClient] Browser connection invalid, reconnecting...")
+            self._browser = None
+
+        # Create new connection
+        if not self._pw:
+            self._pw = await async_playwright().start()
+        
+        logger.info(f"[ComputerClient] Connecting to browser via CDP: {self._cdp_url}")
+        self._browser = await self._pw.chromium.connect_over_cdp(self._cdp_url)
+        logger.info(f"[ComputerClient] Browser connected successfully")
         return self._browser
 
     async def disconnect_browser(self):

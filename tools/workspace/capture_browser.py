@@ -67,6 +67,7 @@ class CaptureBrowserTool(Tool):
         area = tool_args.get("area")
         
         try:
+            await self.computer_client.connect_browser()
             page = get_current_page()
 
             if operation == "screenshot":
