@@ -3,7 +3,7 @@ from tools.base import Tool
 
 
 class FlowCompleteTool(Tool):
-    """Mark the response process as fully completed and terminate recursion"""
+    """Mark the entire task workflow as fully completed and terminate recursion"""
     
     name = "flow_complete"
     
@@ -16,7 +16,7 @@ class FlowCompleteTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Mark this response process as fully completed.",
+                "description": "Mark the entire task workflow as fully completed, with no remaining steps or follow-up actions required.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -26,7 +26,7 @@ class FlowCompleteTool(Tool):
         }
     
     async def execute(self, arguments: str) -> tuple[str, str]:
-        """Execute response complete operation"""
-        result = "Response flow marked as fully completed."
-        summary = "✅ Response complete"
+        """Execute workflow complete operation"""
+        result = "Workflow flow marked as fully completed."
+        summary = "✅ Workflow complete"
         return (result, summary)

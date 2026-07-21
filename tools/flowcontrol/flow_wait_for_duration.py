@@ -5,7 +5,7 @@ from tools.base import Tool
 
 
 class FlowWaitForDurationTool(Tool):
-    """Mark the response process as wait for specified duration seconds."""
+    """Mark the entire task workflow as wait for specified duration seconds."""
     
     name = "flow_wait_for_duration"
     
@@ -18,7 +18,7 @@ class FlowWaitForDurationTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Mark this response process as wait for specified duration seconds.",
+                "description": "Mark the entire task workflow to pause and wait for the specified duration in seconds before resuming subsequent steps.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -34,12 +34,12 @@ class FlowWaitForDurationTool(Tool):
         }
     
     async def execute(self, arguments: str) -> tuple[str, str]:
-        """Execute response complete operation"""
+        """Execute workflow complete operation"""
         tool_args = json.loads(arguments)
         duration = float(tool_args.get("duration", 3.0))
         
         await asyncio.sleep(duration)
-        result = f"Response flow had waited for {duration} seconds."
-        summary = f"⏳ Response had waited for {duration} seconds"
+        result = f"Workflow flow had waited for {duration} seconds."
+        summary = f"⏳ Workflow had waited for {duration} seconds"
         
         return (result, summary)

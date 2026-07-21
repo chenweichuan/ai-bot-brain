@@ -3,7 +3,7 @@ from tools.base import Tool
 
 
 class FlowContinueTool(Tool):
-    """Mark the response as not complete and request continuation"""
+    """Mark the entire task workflow as not complete and request continuation"""
     
     name = "flow_continue"
     
@@ -16,7 +16,7 @@ class FlowContinueTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Mark that the current response is not complete yet.",
+                "description": "Mark the entire task workflow as not yet completed, with remaining steps or follow-up actions still pending.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -26,7 +26,7 @@ class FlowContinueTool(Tool):
         }
     
     async def execute(self, arguments: str) -> tuple[str, str]:
-        """Execute response continue operation"""
-        result = "Response flow marked as not completed yet."
-        summary = "🔄 Response continuing"
+        """Execute workflow continue operation"""
+        result = "Workflow flow marked as not completed yet."
+        summary = "🔄 Workflow continuing"
         return (result, summary)

@@ -3,7 +3,7 @@ from tools.base import Tool
 
 
 class FlowWaitForInputTool(Tool):
-    """Mark the response process as waiting for next input and terminate recursion."""
+    """Mark the entire task workflow as waiting for next input and terminate recursion."""
     
     name = "flow_wait_for_input"
     
@@ -16,7 +16,7 @@ class FlowWaitForInputTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Mark this response process as infinitely waiting for next input.",
+                "description": "Mark the entire task workflow to pause indefinitely and wait for subsequent user input before proceeding with further steps.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -26,7 +26,7 @@ class FlowWaitForInputTool(Tool):
         }
     
     async def execute(self, arguments: str) -> tuple[str, str]:
-        """Execute response wait for next input operation"""
-        result = "Response flow marked as infinitely waiting for next input."
-        summary = "⏳ Response wait for next input"
+        """Execute workflow wait for next input operation"""
+        result = "Workflow flow marked as infinitely waiting for next user input."
+        summary = "⏳ Workflow wait for next input"
         return (result, summary)

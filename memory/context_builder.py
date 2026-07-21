@@ -164,7 +164,8 @@ class ContextBuilder:
                     for tool in tools
                 )
                 + "\n------\n"
-                + "Note: You MUST try to call tools multiple times in one output to improve efficiency."
+                + "Note: Prioritize running multiple independent tool calls in parallel within a single response to reduce interaction rounds, "
+                + "while avoiding unnecessary invocations when a direct answer is possible."
             )
 
         # Role Prompt again
