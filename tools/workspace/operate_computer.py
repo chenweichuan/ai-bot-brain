@@ -450,11 +450,7 @@ class OperateComputerTool(Tool):
                 {
                     "type": "text",
                     "text": f"Screenshot saved after operation.\n" + \
-                        ("The red pointer indicates the current mouse position.\n" if with_pointer else "") + \
-                        "NORMALIZED COORDINATE RULE:\n" + \
-                        "- Origin (0, 0) = TOP-LEFT corner of the screen\n" + \
-                        f"- X-axis: horizontal, increases RIGHTWARD (0 → {self.normalized_coordinates[0]})\n" + \
-                        f"- Y-axis: vertical, increases DOWNWARD (0 → {self.normalized_coordinates[1]})",
+                        ("The red pointer indicates the current mouse position.\n" if with_pointer else ""),
                 },
                 {
                     "type": "image",

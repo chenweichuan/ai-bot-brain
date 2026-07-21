@@ -441,14 +441,6 @@ async def think(request: web.Request) -> web.Response:
 
     try:
         data = await request.json()
-
-        if "depth" in data:
-            del data["depth"]
-        if "max_depth" in data:
-            del data["max_depth"]
-        if "active_time" in data:
-            del data["active_time"]
-        
         async for chunk in agent_service.think(**data):
             await response.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode('utf-8'))
     except Exception as e:
@@ -535,7 +527,7 @@ async def get_mixed_memory(request: web.Request) -> web.Response:
             dumps=lambda obj: json.dumps(obj, ensure_ascii=False)
         )
     except Exception as e:
-        logger.error(f"[API] Text to image error: {e}")
+        logger.error(f"[API] Get mixed memory error: {e}")
         logger.exception(e)
         return web.Response(text=str(e), status=500)
 

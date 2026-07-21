@@ -37,11 +37,11 @@ class PrimitivesService:
 
     # ==================== LLM Primitives ====================
 
-    async def chat(self, model: str = conf().get("chat_model"), **request):
+    async def chat(self, model: str = None, **request):
         """
         LLM对话接口
         """
-        model = model if model != "default" else conf().get("chat_model")
+        model = model if model and model != "default" else conf().get("chat_model")
         logger.info(f"[Primitives] LLM chat: {model}")
         return await LlmClient.factory(model).chat(model=model, **request)
 

@@ -66,8 +66,8 @@ class GenerateFileLinksTool(Tool):
                 if not os.path.isabs(file_path):
                     file_path = os.path.normpath(os.path.join(self.os_workspace, file_path))
 
-                # Validate file is within workspace
-                if not file_path.startswith(self.os_workspace):
+                # Validate file is within workspace or /tmp
+                if not file_path.startswith(self.os_workspace) and not file_path.startswith("/tmp"):
                     results.append({
                         "file_path": file_path,
                         "status": "failed",

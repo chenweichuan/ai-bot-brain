@@ -20,7 +20,7 @@ class LoadImageContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load image content from local file paths or remote URLs, support vision-related interaction scenarios.",
+                "description": "Load image content from local file paths or remote URLs for vision analysis, up to 5 items.",
                 "parameters": {
                     "type": "object",
                     "properties": {

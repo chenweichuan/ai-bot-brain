@@ -20,7 +20,7 @@ class LoadVideoContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load video content from local file path or remote URL, support video-related interaction scenarios.",
+                "description": "Load video content from a local file path or remote URL for analysis.",
                 "parameters": {
                     "type": "object",
                     "properties": {

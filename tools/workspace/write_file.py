@@ -45,7 +45,7 @@ class WriteFileTool(Tool):
                         },
                         "line_count": {
                             "type": "integer",
-                            "description": "Number of lines planned in this segment (must be < 50).",
+                            "description": "Number of lines in this segment (must be < 50).",
                         },
                         "content": {
                             "type": "string",

@@ -18,7 +18,7 @@ class FlowWaitForDurationTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Mark the entire task workflow to pause and wait for the specified duration in seconds before resuming subsequent steps.",
+                "description": "Wait for the specified duration in seconds before continuing.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -39,7 +39,7 @@ class FlowWaitForDurationTool(Tool):
         duration = float(tool_args.get("duration", 3.0))
         
         await asyncio.sleep(duration)
-        result = f"Workflow flow had waited for {duration} seconds."
-        summary = f"⏳ Workflow had waited for {duration} seconds"
+        result = f"Waited for {duration} seconds."
+        summary = f"⏳ Waited {duration}s"
         
         return (result, summary)

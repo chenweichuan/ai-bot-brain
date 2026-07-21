@@ -19,7 +19,7 @@ from providers.llm.client import LlmClient
 from actions.manager import ActionManager
 from actions.flowcontrol import WaitAction
 from tools.manager import ToolManager
-from tools.flowcontrol import FlowContinueTool, FlowWaitForInputTool, FlowCompleteTool
+from tools.flowcontrol import FlowWaitForInputTool, FlowCompleteTool
 
 
 class AgentService:
@@ -57,38 +57,178 @@ class AgentService:
         self,
         username: str = None,
         session_id: str = None,
-        messages: List[Dict[str, Any]] = [],
-        model: str = conf().get("chat_model"),
+        messages: List[Dict[str, Any]] = None,
+        **kargs
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Main thinking loop that handles multi-round iteration"""
+        messages = messages or []
+        depth = 0
+        max_depth = 500
+
+        # Prepare session
+        session_id = await self._prepare_session(username, session_id)
+        yield { "session_id": session_id }
+
+        # Save new messages
+        if messages:
+            new_msg_ids = await self._save_new_messages(username, session_id, messages)
+            yield { "message_ids": new_msg_ids }
+
+        while True:
+            # Set session active time of new round
+            active_time = await self._set_active_time(session_id)
+
+            # Run new round
+            async for chunk in self._think_round(
+                username=username,
+                session_id=session_id,
+                depth=depth,
+                active_time=active_time,
+                **kargs
+            ):
+                yield chunk
+                # Determine whether to exit
+                if "finish_reason" in chunk:
+                    return
+
+            # Handling iterative depth
+            depth += 1
+            if depth >= max_depth:
+                logger.info(f"[Agent] Think {session_id} has reached the max_depth ")
+                yield { "finish_reason": "depth" }
+
+            # Add small delay to avoid overwhelming the system
+            await asyncio.sleep(0.01)
+
+    async def message(
+        self,
+        username: str,
+        message: Dict[str, Any],
+        session_id: str = None,
+    ) -> Dict[str, Any]:
+        """
+        保存消息到会话
+        """
+        # Prepare session
+        session_id = await self._prepare_session(username, session_id)
+
+        # Set active time
+        await self._set_active_time(session_id)
+
+        # Save new messages
+        new_msg_ids = await self._save_new_messages(username, session_id, [message])
+
+        return { "session_id": session_id, "message_id": new_msg_ids[0] }
+
+    async def client_tool_result(
+        self,
+        username: str,
+        session_id: str,
+        tool_call_id: str,
+        content: str,
+        summary: str,
+    ):
+        """
+        提交 client tool 执行结果
+        """
+        # Validate session permission
+        await self.session_manager.check_user_session(username, session_id)
+        
+        if session_id not in self.client_tool_waiters:
+            logger.warning(f"[Agent] No waiter found for session {session_id}")
+            return
+        
+        # Directly store the result
+        self.client_tool_waiters[session_id][tool_call_id] = {
+            "content": content,
+            "summary": summary,
+        } if content else None
+        
+        logger.info(f"[Agent] Received client tool result for {tool_call_id}")
+
+    async def client_action_complete(
+        self,
+        username: str,
+        session_id: str,
+        action_call_id: str,
+    ):
+        """
+        客户端上报 action 执行结束
+        """
+        # Validate session permission
+        await self.session_manager.check_user_session(username, session_id)
+        
+        if action_call_id in self.pending_actions.get(session_id, set()):
+            self.pending_actions[session_id].remove(action_call_id)
+            logger.info(f"[Agent] Received client action complete for {action_call_id}")
+        else:
+            logger.warning(f"[Agent] No pending action found for session {session_id} and action {action_call_id}")
+
+    async def get_history(
+        self,
+        username: str,
+        session_id: str,
+        from_message_id: str = None,
+        after_message_id: str = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        获取会话消息历史
+        """
+        valid_fields = [
+            "id", "timestamp", "mod_time", 
+            "role", "reasoning_content", "content",
+            "name", "tool_calls", "tool_call_id", "model",
+        ]
+        
+        await self.session_manager.check_user_session(username, session_id)
+        history = await self.session_manager.get_message_history(
+            session_id=session_id,
+            from_message_id=from_message_id,
+            after_message_id=after_message_id,
+        )
+        
+        valid_history = []
+        for msg in history:
+            # remove tool call arguments
+            if msg.get("tool_calls"):
+                for tool_call in msg["tool_calls"]:
+                    tool_call["function"]["arguments"] = ""
+            # replace tool message content with summary
+            if msg.get("role") == "tool":
+                msg["content"] = msg.get("summary", "")
+            # filter valid fields
+            msg = {k: v for k, v in msg.items() if k in valid_fields}
+            # filter out empty messages
+            if msg.get("reasoning_content") or msg.get("content") or msg.get("tool_calls"):
+                valid_history.append(msg)
+
+        return valid_history
+
+    async def _think_round(
+        self,
+        username: str = None,
+        session_id: str = None,
+        model: str = None,
         instructions: str = "",
-        actions: List[Dict[str, str]] = [],
-        tools: List[Dict[str, Any]] = [],
+        actions: List[Dict[str, str]] = None,
+        tools: List[Dict[str, Any]] = None,
         thinking: bool = True,
         temperature: float = 0.2,
         top_p: float = 0.85,
         max_text_units: int = ContextBuilder.MAX_TEXT_UNITS,
         max_messages: int = ContextBuilder.MAX_MESSAGES,
         depth: int = 0,
-        max_depth: int = 500,
         active_time: Optional[float] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Main thinking loop that handles tools calling and recursion
-        """
-        model = model if model != "default" else conf().get("chat_model")
-        
-        # Prepare session
-        session_id = await self._prepare_session(username, session_id)
-        yield { "session_id": session_id }
+        """Single thinking round that handles LLM call and action/tool processing"""
+        model = model if model and model != "default" else conf().get("chat_model")
+        actions = actions or []
+        tools = tools or []
 
-        if active_time and not await self._check_active_time(session_id, active_time):
+        if not await self._check_active_time(session_id, active_time):
             logger.info(f"[Agent] Think session {session_id} has been replaced by new request, exiting")
             yield { "finish_reason": "stop" }
             return
-        active_time = await self._set_active_time(session_id)
-
-        # Save new messages
-        new_msg_ids = await self._save_new_messages(username, session_id, messages)
-        yield { "message_ids": new_msg_ids }
 
         # Prepare memory
         memory_context = await self.impression_manager.build_memory_context()
@@ -128,8 +268,8 @@ class AgentService:
             "to_name": username,
             "model": None,
             "streaming": True,
-            "finish_reason": None,
         })
+        llm_finish_reason = None
 
         # Add bot message placeholder to history
         history.append(bot_message)
@@ -237,7 +377,7 @@ class AgentService:
  
                 # Handle finish reason
                 if choice.get("finish_reason"):
-                    bot_message["finish_reason"] = choice["finish_reason"]
+                    llm_finish_reason = choice["finish_reason"]
  
                 # Save message to session manager
                 await self.session_manager.save_message(session_id, bot_message)
@@ -308,7 +448,7 @@ class AgentService:
                 await self._put_memory_queue(
                     username=username,
                     instructions=instructions,
-                    history=history.copy(),
+                    history=self.impression_manager.slice_new_turn_messages(history)
                 )
 
         # Check if we should continue thinking
@@ -318,140 +458,13 @@ class AgentService:
             tool_call_names = [t["function"]["name"] for t in bot_message["tool_calls"] or []]
             should_continue = FlowWaitForInputTool.name not in tool_call_names \
                 and FlowCompleteTool.name not in tool_call_names
-        elif bot_message["finish_reason"] != "stop" and bot_message.get("content"):
-            # If LLM did not stop and there is content, it may indicate that the LLM wants to continue thinking
+        elif llm_finish_reason != "stop" and bot_message.get("content"):
+            # If LLM did not stop and there is content, it may indicate that the output has not ended yet.
             should_continue = True
-
-        # Recursive call
-        if should_continue and depth < max_depth:
-            # Add small delay to avoid overwhelming the system
-            await asyncio.sleep(0.01)
-            # 下一步思考
-            async for chunk in self.think(
-                username=username,
-                session_id=session_id,
-                messages=[],
-                model=model,
-                instructions=instructions,
-                actions=actions,
-                tools=tools,
-                thinking=thinking,
-                temperature=temperature,
-                top_p=top_p,
-                max_text_units=max_text_units,
-                max_messages=max_messages,
-                depth=depth + 1,
-                max_depth=max_depth,
-                active_time=active_time,
-            ):
-                yield chunk
-        else:
+        # Complete
+        if not should_continue:
             logger.info(f"[Agent] Think {session_id} is complete")
             yield { "finish_reason": "complete" }
-
-    async def message(
-        self,
-        username: str,
-        message: Dict[str, Any],
-        session_id: str = None,
-    ) -> Dict[str, Any]:
-        """
-        保存消息到会话
-        """
-        # Prepare session
-        session_id = await self._prepare_session(username, session_id)
-
-        # Set active time
-        await self._set_active_time(session_id)
-
-        # Save new messages
-        new_msg_ids = await self._save_new_messages(username, session_id, [message])
-
-        return { "session_id": session_id, "message_id": new_msg_ids[0] }
-
-    async def client_tool_result(
-        self,
-        username: str,
-        session_id: str,
-        tool_call_id: str,
-        content: str,
-        summary: str,
-    ):
-        """
-        提交 client tool 执行结果
-        """
-        # Validate session permission
-        await self.session_manager.check_user_session(username, session_id)
-        
-        if session_id not in self.client_tool_waiters:
-            logger.warning(f"[Agent] No waiter found for session {session_id}")
-            return
-        
-        # Directly store the result
-        self.client_tool_waiters[session_id][tool_call_id] = {
-            "content": content,
-            "summary": summary,
-        } if content else None
-        
-        logger.info(f"[Agent] Received client tool result for {tool_call_id}")
-
-    async def client_action_complete(
-        self,
-        username: str,
-        session_id: str,
-        action_call_id: str,
-    ):
-        """
-        客户端上报 action 执行结束
-        """
-        # Validate session permission
-        await self.session_manager.check_user_session(username, session_id)
-        
-        if action_call_id in self.pending_actions.get(session_id, set()):
-            self.pending_actions[session_id].remove(action_call_id)
-            logger.info(f"[Agent] Received client action complete for {action_call_id}")
-        else:
-            logger.warning(f"[Agent] No pending action found for session {session_id} and action {action_call_id}")
-
-    async def get_history(
-        self,
-        username: str,
-        session_id: str,
-        from_message_id: str = None,
-        after_message_id: str = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        获取会话消息历史
-        """
-        valid_fields = [
-            "id", "timestamp", "mod_time", 
-            "role", "reasoning_content", "content",
-            "name", "tool_calls", "tool_call_id", "model",
-        ]
-        
-        await self.session_manager.check_user_session(username, session_id)
-        history = await self.session_manager.get_message_history(
-            session_id=session_id,
-            from_message_id=from_message_id,
-            after_message_id=after_message_id,
-        )
-        
-        valid_history = []
-        for msg in history:
-            # remove tool call arguments
-            if msg.get("tool_calls"):
-                for tool_call in msg["tool_calls"]:
-                    tool_call["function"]["arguments"] = ""
-            # replace tool message content with summary
-            if msg.get("role") == "tool":
-                msg["content"] = msg.get("summary", "")
-            # filter valid fields
-            msg = {k: v for k, v in msg.items() if k in valid_fields}
-            # filter out empty messages
-            if msg.get("reasoning_content") or msg.get("content") or msg.get("tool_calls"):
-                valid_history.append(msg)
-
-        return valid_history
 
     async def _prepare_session(self, username: str, session_id: str) -> str:
         """Prepare session for agent"""
@@ -535,14 +548,11 @@ class AgentService:
                 task_params = await self.memory_queue.get()
                 
                 try:
-                    # Slice new turn messages
-                    new_turn_messages = self.impression_manager.slice_new_turn_messages(task_params["history"])
-                    
                     # Maintain impressions
                     await self.impression_manager.maintain_impressions_by_llm(
                         username=task_params["username"],
                         instructions=task_params["instructions"],
-                        messages=new_turn_messages,
+                        messages=task_params["history"],
                     )
                     
                     logger.info(f"[Agent] Completed memory task, remaining in queue: {self.memory_queue.qsize()}")

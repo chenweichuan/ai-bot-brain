@@ -27,6 +27,6 @@ class FlowWaitForInputTool(Tool):
     
     async def execute(self, arguments: str) -> tuple[str, str]:
         """Execute workflow wait for next input operation"""
-        result = "Workflow flow marked as infinitely waiting for next user input."
-        summary = "⏳ Workflow wait for next input"
+        result = "Workflow paused, waiting for user input."
+        summary = "⏳ Waiting for input"
         return (result, summary)

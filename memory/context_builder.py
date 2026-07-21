@@ -30,16 +30,18 @@ class ContextBuilder:
     
     def build_context(
         self,
-        history: List[Dict[str, Any]] = [],
+        history: List[Dict[str, Any]] = None,
         memory: str = "",
         instructions: str = "",
-        actions: List[Dict[str, str]] = [],
-        tools: List[Dict[str, Any]] = [],
+        actions: List[Dict[str, str]] = None,
+        tools: List[Dict[str, Any]] = None,
         max_text_units: int = MAX_TEXT_UNITS,
         max_messages: int = MAX_MESSAGES,
     ) -> List[Dict[str, Any]]:
         """Prepare messages for LLM request"""
-        history = copy.deepcopy(history)
+        history = copy.deepcopy(history or [])
+        actions = actions or []
+        tools = tools or []
         max_text_units = min(abs(max_text_units), self.MAX_TEXT_UNITS)
         max_messages = min(abs(max_messages), self.MAX_MESSAGES)
         
@@ -112,9 +114,12 @@ class ContextBuilder:
         self,
         memory: str = "",
         instructions: str = "",
-        actions: List[Dict[str, str]] = [],
-        tools: List[Dict[str, Any]] = [],
+        actions: List[Dict[str, str]] = None,
+        tools: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        actions = actions or []
+        tools = tools or []
+
         owner_name = conf().get("owner_name", "")
         bot_name = conf().get("bot_name", "Bot")
         bot_alias = conf().get("bot_alias", "")
@@ -152,7 +157,7 @@ class ContextBuilder:
                     for action in actions
                 )
                 + "\n------\n"
-                + "Note: Do NOT use action that not exits above."
+                + "Note: Do NOT use actions not listed above."
             )
 
         if tools:
