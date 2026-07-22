@@ -477,17 +477,6 @@ async def client_tool_result(request: web.Request) -> web.Response:
         logger.exception(e)
         return web.Response(text=str(e), status=500)
 
-async def client_action_complete(request: web.Request) -> web.Response:
-    """客户端上报 action 执行结束"""
-    try:
-        data = await request.json()
-        await agent_service.client_action_complete(**data)
-        return web.Response(text="success")
-    except Exception as e:
-        logger.error(f"[API] Client action complete error: {e}")
-        logger.exception(e)
-        return web.Response(text=str(e), status=500)
-
 async def get_history(request: web.Request) -> web.Response:
     """获取用户消息历史"""
     try:
@@ -575,7 +564,6 @@ def create_app() -> web.Application:
     app.router.add_post("/agent/think", think)
     app.router.add_post("/agent/message", message)
     app.router.add_post("/agent/client-tool-result", client_tool_result)
-    app.router.add_post("/agent/client-action-complete", client_action_complete)
     app.router.add_get("/agent/get-history", get_history)
     
     # Memory Endpoints
