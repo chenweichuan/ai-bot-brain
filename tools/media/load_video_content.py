@@ -20,7 +20,7 @@ class LoadVideoContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load video content from a local file path or remote URL for analysis.",
+                "description": "Load video content from a local file path or remote URL for analysis. One video per round only.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -44,7 +44,6 @@ class LoadVideoContentTool(Tool):
             "type": "video",
             "video": {
                 "url": input,
-                "detail": "low",
             },
         }]
         

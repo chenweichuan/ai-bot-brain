@@ -13,7 +13,7 @@ websocket_client==1.8.0
 redis==5.2.1
 pypinyin==0.53.0
 opuslib==3.0.1
-Pillow
+Pillow==12.3.0
 google-genai==1.56.0
 python-magic==0.4.27
 azure-cognitiveservices-speech==1.40.0

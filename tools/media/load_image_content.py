@@ -20,13 +20,13 @@ class LoadImageContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load image content from local file paths or remote URLs for vision analysis, up to 5 items.",
+                "description": "Load image content from local file paths or remote URLs for vision analysis, up to 10 items per round.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "input": {
                             "type": "array",
-                            "description": "List of local image file paths or remote image URLs, up to 5 items.",
+                            "description": "List of local image file paths or remote image URLs, up to 10 items.",
                             "items": {
                                 "type": "string",
                                 "description": "Local image file path or remote image URL"

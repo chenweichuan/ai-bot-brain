@@ -22,7 +22,7 @@ class LoadVoiceContentTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Load and transcribe voice content from local file path or remote URL, convert speech to text.",
+                "description": "Load and transcribe voice content from local file path or remote URL, convert speech to text, up to 5 items per round.",
                 "parameters": {
                     "type": "object",
                     "properties": {

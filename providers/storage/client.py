@@ -107,12 +107,18 @@ class StorageClient():
     @staticmethod
     def path_to_url(path: str) -> str:
         """Convert storage path to URL"""
+        path = os.path.normpath(path)
+        if not path.startswith(StorageClient.base_path + os.sep):
+            raise ValueError(f"Path is outside storage directory: {path}")
         return StorageClient.base_url + path.replace(StorageClient.base_path, '')
 
     @staticmethod
     def url_to_path(url: str) -> str:
         """Convert storage URL to path"""
-        return StorageClient.base_path + url.replace(StorageClient.base_url, '')
+        path = os.path.normpath(StorageClient.base_path + url.replace(StorageClient.base_url, ''))
+        if not path.startswith(StorageClient.base_path + os.sep):
+            raise ValueError(f"URL resolves to path outside storage directory: {url}")
+        return path
 
     @staticmethod
     async def _moderate_file_background(file_path: str):
