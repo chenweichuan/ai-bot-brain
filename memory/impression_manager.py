@@ -10,7 +10,6 @@ from common.message import count_text_units, stringify_message
 from config import conf
 from providers.llm.client import LlmClient
 from impressmem import ImpressMemConfig, ImpressMemManager, slice_new_turn_messages
-from impressmem.tools import SaveImpressionTool, OrganizeImpressionsTool
 
 from memory.context_builder import ContextBuilder
 
@@ -54,10 +53,6 @@ class ImpressionManager(ImpressMemManager):
         
         # Add extra key that ImpressMem doesn't have
         self.CLUE_MESSAGE_ID_ZSET_KEY = f"{self.KEY_PREFIX}:clue:message_ids:%s"
-        
-        # Initialize impressmem tools
-        self.save_impression_tool = SaveImpressionTool(self)
-        self.organize_impressions_tool = OrganizeImpressionsTool(self)
 
     # ==================== Clue Memory - Extra methods not in ImpressMem ====================
 
@@ -228,10 +223,7 @@ class ImpressionManager(ImpressMemManager):
         memory_context = await self.build_memory_context()
 
         # Get tool definitions directly from impressmem tools
-        send_tools = [
-            await self.save_impression_tool.get_definition(),
-            await self.organize_impressions_tool.get_definition(),
-        ]
+        send_tools = self.get_maintain_tool_definitions()
         
         # Build context, limited messages
         send_messages = self.context_builder.build_context(
@@ -247,15 +239,7 @@ class ImpressionManager(ImpressMemManager):
         
         send_messages.append({
             "role": "user",
-            "content": (
-                f"There are some new messages{f' with {username}' if username else ''}.\n"
-                "- Analyze whether to add or update memory impressions base on the new messages.\n"
-                "- Analyze whether to merge redundant or obsolete memory entries in all memory entries.\n"
-                "Note: \n"
-                f"- You SHOULD call {SaveImpressionTool.name} and {OrganizeImpressionsTool.name} tools at the same time.\n"
-                "- This analysis and memory processing operation itself should NOT be recorded as a memory impression.\n"
-                "- If there's nothing to do, just reply \"IGNORE\"."
-            ),
+            "content": self.get_maintain_prompt(),
         })
         
         request = {
@@ -271,29 +255,22 @@ class ImpressionManager(ImpressMemManager):
         response = await LlmClient.factory(request["model"]).chat(**request)
         
         # Get the response message
-        maintain_message = response["choices"][0]["message"]
+        maintenance_message = response["choices"][0]["message"]
+        maintenance_tool_calls = maintenance_message.get("tool_calls") or []
+
+        logger.info(f"[ImpressionManager] Tool calls for maintenance: {json.dumps(maintenance_tool_calls, ensure_ascii=False)}")
         
         # Execute each tool call
-        for tool_call in maintain_message.get("tool_calls") or []:
-            try:
-                # Execute tool call directly
-                if tool_call["function"]["name"] == SaveImpressionTool.name:
-                    await self.save_impression_tool.execute(tool_call["function"]["arguments"])
-                elif tool_call["function"]["name"] == OrganizeImpressionsTool.name:
-                    await self.organize_impressions_tool.execute(tool_call["function"]["arguments"])
-                else:
-                    raise 
-            except Exception as e:
-                logger.error(f"[ImpressionManager] Failed to execute memory tool: {e}")
+        await self.execute_maintain_tool_calls(maintenance_tool_calls)
 
         # Collect all save impression tool calls from memory_message and new turn-of-conversation messages
         all_save_impression_tool_calls = [
-            tc for tc in maintain_message.get("tool_calls") or [] if tc["function"]["name"] == SaveImpressionTool.name
+            tc for tc in maintenance_tool_calls if tc["function"]["name"] == self.save_impression_tool.name
         ]
         for message in messages:
             all_save_impression_tool_calls.extend([
                 tc for tc in message.get("tool_calls") or []
-                if tc["function"]["name"] == SaveImpressionTool.name
+                if tc["function"]["name"] == self.save_impression_tool.name
             ])
 
         # Save clue message IDs

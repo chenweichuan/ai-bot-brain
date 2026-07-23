@@ -57,7 +57,7 @@ def stringify_message(msg: dict[str, any]) -> str:
     msg_str = ""
     
     # Stringify message content and tool calls
-    content = stringify_message_content(msg["content"] if msg["role"] != "tool" else msg.get("summary") or "")
+    content = stringify_message_content(msg["content"])
     if msg.get("tool_calls"):
         tool_calls = list(map(lambda call:
             f"Call tool {call['function']['name']} with arguments: {call['function']['arguments']}"
@@ -65,7 +65,7 @@ def stringify_message(msg: dict[str, any]) -> str:
         content += "\n\n" + "\n".join(tool_calls)
 
     # Truncate content if it exceeds the maximum number of text units
-    max_content_units = 5000
+    max_content_units = 5000 if msg.get("role") != "tool" else 1000
     if count_text_units(content) > max_content_units:
         truncated_length = len(content) / count_text_units(content) * max_content_units * 0.9
         content = f"{content[:int(truncated_length/2)]}\n...[Content Truncated]...\n{content[-int(truncated_length/2):]}"

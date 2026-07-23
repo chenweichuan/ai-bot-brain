@@ -19,7 +19,7 @@ class OrganizeImpressionsTool(Tool):
     
     async def get_definition(self) -> Dict[str, Any]:
         """Get tool definition for LLM"""
-        return await self.impressmem_tool.get_definition()
+        return self.impressmem_tool.get_definition()
     
     async def execute(self, arguments: str) -> tuple[str, str]:
         """

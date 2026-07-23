@@ -4,7 +4,7 @@ torch==2.10.0
 torchaudio==2.10.0
 torchvision==0.25.0
 
-impressmem==0.2.2
+impressmem==0.3.0
 aiohttp==3.13.3
 httpx==0.28.1
 websockets==15.0.1
