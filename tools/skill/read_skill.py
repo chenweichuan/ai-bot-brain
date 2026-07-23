@@ -21,12 +21,14 @@ class ReadSkillTool(Tool):
     async def get_definition(self) -> Dict[str, Any]:
         """Get tool definition"""
         # Get skill list for enum options
+        skills = self.skill_manager.get_list()
         return {
             "type": "function",
             "function": {
                 "name": self.name,
                 "description": f"Read a skill document under {self.skill_dir}. "
-                    "MUST use this when you need to access domain-specific expertise or follow specialized procedures.",
+                    "MUST read before handling tasks matching an available skill's domain. "
+                    f"Available skills: {[s['name'] for s in skills]}",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -36,11 +38,11 @@ class ReadSkillTool(Tool):
                         },
                         "skill_document": {
                             "type": "string",
-                            "description": "The document path within the skill directory to read.",
+                            "description": "Relative document path within the skill directory to read.",
                             "default": SKILL_MAIN_DOCUMENT
                         },
                     },
-                    "required": ["skill_name", "skill_document"],
+                    "required": ["skill_name"],
                 },
             },
         }

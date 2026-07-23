@@ -19,14 +19,12 @@ class ListSkillsTool(Tool):
     
     async def get_definition(self) -> Dict[str, Any]:
         """Get tool definition"""
-        skills = self.skill_manager.get_list()
         return {
             "type": "function",
             "function": {
                 "name": self.name,
                 "description": f"Refresh and list all available skills under {self.skill_dir} with descriptions. "
-                    "Use this to get the latest skill list or learn what each skill does before loading one. "
-                    f"Known skills: {[s['name'] for s in skills]}",
+                    "Use this to get the latest skill list or learn what each skill does before loading one.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
