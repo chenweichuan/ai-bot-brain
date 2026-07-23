@@ -152,9 +152,11 @@ class OperateBrowserTool(Tool):
                         pass
                     result = summary = f"✅ Browser navigated to {tool_args['url']} successfully, current URL: {page.url}, title: {await page.title()}."
                 elif operation == "evaluate":
-                    eval_result = await page.evaluate(tool_args["script"])
+                    js_script = tool_args.get("script")
+                    preview = js_script[:50].replace('\n', ' ') + '...' if len(js_script) > 50 else js_script.replace('\n', ' ')
+                    eval_result = await page.evaluate(js_script)
                     result = f"✅ Browser evaluated JavaScript successfully, result: {eval_result}."
-                    summary = f"✅ Browser evaluated JavaScript successfully."
+                    summary = f"✅ Browser evaluated JavaScript successfully: {preview}"
                 elif operation == "wait":
                     timeout = tool_args.get("timeout", 5)
                     selector = tool_args.get("selector")

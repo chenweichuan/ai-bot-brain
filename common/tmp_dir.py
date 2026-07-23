@@ -33,10 +33,6 @@ class TmpDir(object):
         Returns:
             str: Path to the saved temporary file
         """
-        # Return if already a tmp path
-        if isinstance(file, str) and file.startswith(TmpDir.base_path):
-            return file
-
         # Handle different input types
         if isinstance(file, io.BytesIO):
             buffered = file.getvalue()

@@ -35,7 +35,7 @@ class StorageClient():
         # Return if already a storage URL or path
         if isinstance(file, str) and file.startswith(StorageClient.base_url):
             return StorageClient.url_to_path(file)
-        elif isinstance(file, str) and file.startswith(StorageClient.base_path):
+        elif isinstance(file, str) and file.startswith(StorageClient.base_path + os.sep):
             return file
 
         original_filename = None
