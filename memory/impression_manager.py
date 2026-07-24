@@ -200,9 +200,6 @@ class ImpressionManager(ImpressMemManager):
 
     # ==================== Maintain Impressions By LLM - Extra methods not in ImpressMem ====================
 
-    def slice_new_turn_messages(self, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return slice_new_turn_messages(history)
-
     async def maintain_impressions_by_llm(
         self,
         messages: List[Dict[str, Any]],
@@ -239,7 +236,8 @@ class ImpressionManager(ImpressMemManager):
         
         send_messages.append({
             "role": "user",
-            "content": self.get_maintain_prompt(),
+            "content": f"New turn of conversation{f' with {username}' if username else ''}.\n"
+                + self.get_maintain_prompt(),
         })
         
         request = {
@@ -248,7 +246,6 @@ class ImpressionManager(ImpressMemManager):
             "thinking": True,
             "stream": False,
             "temperature": 0.1,
-            "top_p": 0.85,
             "tools": send_tools,
             "tool_choice": "auto"
         }
@@ -274,12 +271,13 @@ class ImpressionManager(ImpressMemManager):
             ])
 
         # Save clue message IDs
-        clue_message_ids = [msg["id"] for msg in messages]
-        for tool_call in all_save_impression_tool_calls:
-            try:
-                arguments = tool_call["function"]["arguments"]
-                args = json.loads(arguments) if arguments else {}
-                clue: str = args.get("clue", "").strip()
-                await self.save_clue_message_ids(clue, clue_message_ids)
-            except Exception as e:
-                logger.error(f"[ImpressionManager] Failed to save clue message IDs: {e}")
+        clue_message_ids = [msg["id"] for msg in messages if msg.get("id")]
+        if clue_message_ids:
+            for tool_call in all_save_impression_tool_calls:
+                try:
+                    arguments = tool_call["function"]["arguments"]
+                    args = json.loads(arguments) if arguments else {}
+                    clue: str = args.get("clue", "").strip()
+                    await self.save_clue_message_ids(clue, clue_message_ids)
+                except Exception as e:
+                    logger.error(f"[ImpressionManager] Failed to save clue message IDs: {e}")

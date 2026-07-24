@@ -141,10 +141,10 @@ class OperateComputerTool(Tool):
             # Build result description for LLM
             if returncode == 0:
                 if stdout_text:
-                    result_text = f"Command executed:\n\n{stdout_text}"
+                    result_text = f"Command executed successfully:\n\n{stdout_text}"
                     summary = f"✅ Command executed successfully: {preview}"
                 else:
-                    result_text = f"Command executed (no output)"
+                    result_text = f"Command executed successfully (no output)"
                     summary = f"✅ Command executed successfully: {preview}"
             elif returncode == -1:
                 # Timeout case

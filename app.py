@@ -16,6 +16,7 @@ from scheduler.inner_mode import InnerModeScheduler
 from service.memory import MemoryService
 from service.primitives import PrimitivesService
 from service.agent import AgentService
+from service.presence import PresenceService
 
 
 # ==================== Global Services ====================
@@ -23,13 +24,13 @@ from service.agent import AgentService
 primitives_service: Optional[PrimitivesService] = None
 memory_service: Optional[MemoryService] = None
 agent_service: Optional[AgentService] = None
-
+presence_service: Optional[PresenceService] = None
 
 # ==================== Startup and Shutdown ====================
 
 async def startup(app: web.Application):
     """应用启动时初始化服务"""
-    global primitives_service, memory_service, agent_service
+    global primitives_service, memory_service, agent_service, presence_service
     
     logger.info("[API] Initializing services...")
     
@@ -45,6 +46,9 @@ async def startup(app: web.Application):
     # 初始化Agent服务
     agent_service = AgentService()
 
+    # 初始化Presence服务
+    presence_service = PresenceService()
+
     # 启动AutoScheduler
     InnerModeScheduler.setup()
 
@@ -56,8 +60,6 @@ async def shutdown(app: web.Application):
 
 
 # ==================== Helper Functions ====================
-
-
 
 async def _get_post_file_path(request: web.Request) -> str:
     """获取单个上传文件的本地路径"""
@@ -521,6 +523,44 @@ async def get_mixed_memory(request: web.Request) -> web.Response:
         return web.Response(text=str(e), status=500)
 
 
+# ==================== Presence Endpoints ====================
+
+async def presence_chat(request: web.Request) -> web.Response:
+    """
+    Presence chat endpoint - OpenAI-compatible single-round chat with memory injection.
+    Designed to reside in external agent environments.
+    """
+    try:
+        data = await request.json()
+        username = data.pop("username", None)
+
+        if data.get("stream"):
+            # 流式响应
+            response = StreamResponse()
+            response.content_type = "text/event-stream"
+            await response.prepare(request)
+
+            gen = await presence_service.chat(**data, username=username)
+            async for chunk in gen:
+                await response.write(
+                    f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode('utf-8')
+                )
+            await response.write(b"data: [DONE]\n\n")
+            return response
+        else:
+            # 非流式响应
+            result = await presence_service.chat(**data, username=username)
+            return web.json_response(
+                result,
+                dumps=lambda obj: json.dumps(obj, ensure_ascii=False)
+            )
+    except Exception as e:
+        logger.error(f"[API] Presence chat error: {e}")
+        logger.exception(e)
+        return web.Response(text=str(e), status=500)
+
+
+
 # ==================== Application Setup ====================
 
 def create_app() -> web.Application:
@@ -569,7 +609,10 @@ def create_app() -> web.Application:
     # Memory Endpoints
     app.router.add_get("/memory/get-auto-mode-history", get_auto_mode_history)
     app.router.add_get("/memory/get-mixed-memory", get_mixed_memory)
-    
+
+    # Presence Endpoints - OpenAI-compatible, /presence/.../completions
+    app.router.add_post("/presence{tail:.*}/completions", presence_chat)
+
     return app
 
 

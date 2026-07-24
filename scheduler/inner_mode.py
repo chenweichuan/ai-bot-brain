@@ -101,21 +101,11 @@ class InnerModeScheduler:
             logger.error(f"Failed to load session_id: {e}")
             return None
 
-    async def _delete_session_id(self):
-        """Delete session ID from Redis"""
-        try:
-            await self.redis_client.delete(self.SESSION_ID_KEY)
-            logger.info("Session_id deleted from Redis")
-        except Exception as e:
-            logger.error(f"Failed to delete session_id: {e}")
-
     async def run_agent_think(self):
         """Run the agent's think method with appropriate parameters"""
         logger.info("=== Starting agent autonomous thinking session ===")
         
         try:
-            session_id = await self._get_session_id()
-            
             # Create prompt telling the agent it's autonomous time
             instructions = f"""Now it's your own Inner Thinking Mode time. 
 No user interaction is required and no user will see your inner thoughts.
@@ -125,7 +115,6 @@ You can:
 - Think about any other things you can do and planning future tasks."""
 
             async for chunk in self.agent_service.think(
-                session_id=session_id,
                 instructions=instructions,
                 model=conf().get("chat_model"),
             ):
@@ -133,8 +122,6 @@ You can:
                 if "session_id" in chunk:
                     session_id = chunk["session_id"]
                     await self._save_session_id(session_id)
-
-            await self._delete_session_id()
             
             logger.info("=== Agent autonomous thinking session completed ===")
             

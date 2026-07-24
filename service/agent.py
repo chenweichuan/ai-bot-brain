@@ -11,7 +11,7 @@ from common.message import count_text_units
 from common.redis import RedisClient
 from config import conf
 from memory.context_builder import ContextBuilder
-from memory.impression_manager import ImpressionManager
+from memory.impression_manager import ImpressionManager, slice_new_turn_messages
 from memory.session_manager import SessionManager
 from providers.llm.client import LlmClient
 from tools.manager import ToolManager
@@ -55,7 +55,7 @@ class AgentService:
         """Main thinking loop that handles multi-round iteration"""
         messages = messages or []
         depth = 0
-        max_depth = 500
+        max_depth = conf().get("round_limit_think", 100)
 
         # Prepare session
         session_id = await self._prepare_session(username, session_id)
@@ -187,7 +187,6 @@ class AgentService:
         tools: List[Dict[str, Any]] = None,
         thinking: bool = True,
         temperature: float = 0.2,
-        top_p: float = 0.85,
         max_text_units: int = ContextBuilder.MAX_TEXT_UNITS,
         max_messages: int = ContextBuilder.MAX_MESSAGES,
         depth: int = 0,
@@ -203,7 +202,7 @@ class AgentService:
             return
 
         # Prepare memory
-        memory_context = await self.impression_manager.build_memory_context()
+        memory = await self.impression_manager.build_memory_context()
         history = await self.session_manager.get_message_history(
             session_id=session_id, limit=ContextBuilder.MAX_MESSAGES
         )
@@ -216,7 +215,7 @@ class AgentService:
         # Prepare context for LLM
         send_messages = self.context_builder.build_context(
             history=history,
-            memory=memory_context,
+            memory=memory,
             instructions=instructions,
             tools=send_tools,
             max_text_units=max_text_units,
@@ -254,7 +253,6 @@ class AgentService:
                 "tools": send_tools if send_tools else None,
                 "tool_choice": "auto" if send_tools else None,
                 "temperature": temperature,
-                "top_p": top_p,
             }
             response = await LlmClient.factory(request["model"]).chat(**request)
 
@@ -370,7 +368,7 @@ class AgentService:
                 await self._put_memory_queue(
                     username=username,
                     instructions=instructions,
-                    history=self.impression_manager.slice_new_turn_messages(history)
+                    history=slice_new_turn_messages(history)
                 )
 
         # Check if we should continue thinking
@@ -468,7 +466,6 @@ class AgentService:
             while not self.memory_queue.empty():
                 # Get task from queue
                 task_params = await self.memory_queue.get()
-                
                 try:
                     # Maintain impressions
                     await self.impression_manager.maintain_impressions_by_llm(
@@ -476,7 +473,6 @@ class AgentService:
                         instructions=task_params["instructions"],
                         messages=task_params["history"],
                     )
-                    
                     logger.info(f"[Agent] Completed memory task, remaining in queue: {self.memory_queue.qsize()}")
                 except Exception as e:
                     logger.error(f"[Agent] Failed to process memory task: {e}")

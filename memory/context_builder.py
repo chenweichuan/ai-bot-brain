@@ -44,7 +44,7 @@ class ContextBuilder:
         max_messages = min(abs(max_messages), self.MAX_MESSAGES)
         
         # Build system message
-        system_message = self._build_system_message(
+        system_message = self.build_system_message(
             memory=memory,
             instructions=instructions,
             tools=tools,
@@ -107,7 +107,7 @@ class ContextBuilder:
 
         return messages
 
-    def _build_system_message(
+    def build_system_message(
         self,
         memory: str = "",
         instructions: str = "",

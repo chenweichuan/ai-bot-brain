@@ -18,9 +18,9 @@
     "password": ""
   },
   "chat_model": "doubao-seed-2.0-lite",
-  "inner_mode_model": "doubao-seed-2.0-lite",
   "memory_model": "doubao-seed-2.0-lite",
   "image_model": "doubao-seedream-5.0-lite",
+  "round_limit_think": 100,
   "rate_limit_image": 5,
   "model_providers": [
     {
@@ -70,5 +70,5 @@
   "volc_search_api_key": "your_volc_search_api_key",
   "proxy_pool_url": "http://127.0.0.1:5010/get/",
   "chromium_path": "/usr/bin/chromium-browser",
-  "auto_scheduler_interval": 3600
+  "auto_scheduler_interval": 1800
 }
