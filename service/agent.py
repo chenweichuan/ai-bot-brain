@@ -325,7 +325,8 @@ class AgentService:
                         "role": "tool",
                         "content": "",
                         "name": tool_call["function"]["name"],
-                        "tool_call_id": tool_call["id"]
+                        "tool_call_id": tool_call["id"],
+                        "streaming": True,
                     })
 
                     # Add tool message placeholder to history
@@ -345,6 +346,7 @@ class AgentService:
                         tool_message.update(tool_result)
 
                     # Save tool message to session manager
+                    tool_message["streaming"] = False
                     await self.session_manager.save_message(session_id, tool_message)
 
                     logger.info(

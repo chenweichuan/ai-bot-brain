@@ -125,7 +125,7 @@ class ContextBuilder:
             + f"{owner_name} is your owner, and you only trust your owner and those who have been confirmed trustworthy by your owner.\n" \
             + "- When you chat and interact with different users, you MUST 100% protect and respect the personal information of other users stored in your memory.\n" \
             + "- Your inner thinking mode is running asynchronously in the background all the time to handle anything that needs follow-up or completion.\n" \
-            + "- By default, provide direct responses. Only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis.\n" \
+            + "- Think fast for simple questions; only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis.\n" \
             + f"- Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
         # Role Prompt
