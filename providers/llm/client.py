@@ -180,7 +180,8 @@ class LlmClient:
                     if icc:
                         save_kwargs["icc_profile"] = icc
 
-                tmp_path = f"{input_path}.tmp_{uuid.uuid4().hex[:8]}"
+                ext = os.path.splitext(input_path)[1]
+                tmp_path = input_path.replace(ext, f"_tmp_{uuid.uuid4().hex[:8]}{ext}")
                 try:
                     resized.save(tmp_path, **save_kwargs)
                     os.replace(tmp_path, input_path)

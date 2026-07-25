@@ -118,6 +118,10 @@ class OperateComputerTool(Tool):
         operation = tool_args.get("operation")
         display = self.os_display
         
+        # If the "command" parameter is provided, automatically set operation to "command"
+        if tool_args.get("command"):
+            operation = "command"
+        
         final_result = []
         result_text: str = ""
         summary: str = ""
