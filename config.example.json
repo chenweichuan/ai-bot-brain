@@ -33,11 +33,7 @@
       "name": "zhipuai",
       "api_base": "https://open.bigmodel.cn/api/paas/v4",
       "api_key": "your_zhipuai_api_key",
-      "prefixes": ["glm-"],
-      "vision_fallback": {
-        "glm-4.7": "glm-4.6v",
-        "glm-5.2": "glm-5v-turbo"
-      }
+      "prefixes": ["glm-"]
     },
     {
       "name": "googleai",

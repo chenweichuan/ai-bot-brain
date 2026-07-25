@@ -32,7 +32,7 @@ class PresenceService:
     async def chat(
         self,
         messages: List[Dict[str, Any]],
-        model: str = "",
+        model: str = None,
         stream: bool = False,
         username: Optional[str] = None,
         **kwargs,
