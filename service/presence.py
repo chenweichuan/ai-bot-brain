@@ -34,22 +34,23 @@ class PresenceService:
         messages: List[Dict[str, Any]],
         model: str = "",
         stream: bool = False,
-        temperature: Optional[float] = None,
         username: Optional[str] = None,
-        **_,
+        **kwargs,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Single-round chat: inject memory → forward to LLM → async memory save.
         Returns async generator of OpenAI SSE chunks (stream) or single dict (non-stream).
         """
         model = model if model and model != "default" else conf().get("chat_model")
+
         # Prepare memory
         memory = await self.impression_manager.build_memory_context()
 
         # Extract instructions
-        instructions = None
+        instructions = f"Current user: {username}" if username else ""
         if messages[0].get("role") in ("system", "developer"):
-            instructions = messages[0]["content"]
+            instructions += "\n\n" if instructions else ""
+            instructions += messages[0]["content"]
             del messages[0]
 
         # Build system message
@@ -61,9 +62,12 @@ class PresenceService:
         # Prepare context for LLM
         messages = [system_message] + messages
 
-        request = dict(model=model, messages=messages, stream=stream)
-        if temperature is not None:
-            request["temperature"] = temperature
+        request = dict(
+            **kwargs,
+            messages=messages,
+            model=model,
+            stream=stream,
+        )
 
         if stream:
             async def _stream_gen():
@@ -92,10 +96,9 @@ class PresenceService:
         else:
             result = await LlmClient.factory(request["model"]).chat(**request)
             reply_content = ""
-            try:
-                reply_content = result["choices"][0]["message"].get("content", "")
-            except Exception:
-                pass
+            if result.get("choices"):
+                message = result["choices"][0].get("message", {})
+                reply_content = message.get("content")
             # Async memory save after response completes
             if reply_content:
                 await self._put_memory_queue(

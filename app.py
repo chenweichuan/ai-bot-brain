@@ -605,13 +605,13 @@ def create_app() -> web.Application:
     app.router.add_post("/agent/message", message)
     app.router.add_post("/agent/client-tool-result", client_tool_result)
     app.router.add_get("/agent/get-history", get_history)
+
+    # Presence Endpoints - OpenAI-compatible, /presence/.../completions
+    app.router.add_post("/presence{tail:.*}/completions", presence_chat)
     
     # Memory Endpoints
     app.router.add_get("/memory/get-auto-mode-history", get_auto_mode_history)
     app.router.add_get("/memory/get-mixed-memory", get_mixed_memory)
-
-    # Presence Endpoints - OpenAI-compatible, /presence/.../completions
-    app.router.add_post("/presence{tail:.*}/completions", presence_chat)
 
     return app
 
