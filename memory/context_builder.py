@@ -150,7 +150,7 @@ class ContextBuilder:
 
         if actions:
             prompts.append(
-                "You can trigger actions, interleaved directly in content output using format: <action-NAME args=\"VALUE\" />\n"
+                "You can trigger client actions, interleaved directly in content output using format: <action-NAME args=\"VALUE\" />\n"
                 "------\n"
                 + "\n".join(
                     f"- <action-{action['name']} args=\"{action.get('args') or ''}\" /> - {action['description']}"

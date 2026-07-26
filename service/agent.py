@@ -5,7 +5,6 @@ import asyncio
 import json
 import re
 import time
-import uuid
 from typing import Dict, List, Any, AsyncGenerator, Optional
 
 from common.log import logger
@@ -16,8 +15,6 @@ from memory.context_builder import ContextBuilder
 from memory.impression_manager import ImpressionManager, slice_new_turn_messages
 from memory.session_manager import SessionManager
 from providers.llm.client import LlmClient
-from actions.manager import ActionManager
-from actions.flowcontrol import WaitAction
 from tools.manager import ToolManager
 from tools.flowcontrol import FlowWaitForInputTool, FlowCompleteTool
 
@@ -37,7 +34,6 @@ class AgentService:
         self.impression_manager = ImpressionManager.get_instance()
         self.session_manager = SessionManager.get_instance()
         self.context_builder = ContextBuilder.get_instance()
-        self.action_manager = ActionManager.get_instance()
         self.tool_manager = ToolManager.get_instance()
         self.redis_client = RedisClient.get_instance()
 
@@ -47,11 +43,11 @@ class AgentService:
         self.bot_name = conf().get("bot_name", "Bot")
         self.KEY_PREFIX = f"{self.bot_name.lower().replace(' ', '_')}:agent"
         
+        # Client action waiters: {session_id: asyncio.Event}
+        self.client_action_waiters: Dict[str, asyncio.Event] = {}
+        
         # Client tool waiters: {session_id: {tool_call_id: result}}
         self.client_tool_waiters: Dict[str, Dict[str, Dict]] = {}
-        
-        # Pending actions tracking: {session_id: set(action_call_id)}
-        self.pending_actions: Dict[str, set] = {}
     
     async def think(
         self,
@@ -91,6 +87,12 @@ class AgentService:
                 if "finish_reason" in chunk:
                     return
 
+            # Handling active time check
+            if not await self._check_active_time(session_id, active_time):
+                logger.info(f"[Agent] Think session {session_id} has been replaced by new request, exiting")
+                yield { "finish_reason": "stop" }
+                return
+
             # Handling iterative depth
             depth += 1
             if depth >= max_depth:
@@ -100,7 +102,7 @@ class AgentService:
             # Add small delay to avoid overwhelming the system
             await asyncio.sleep(0.01)
 
-    async def message(
+    async def receive_message(
         self,
         username: str,
         message: Dict[str, Any],
@@ -120,7 +122,24 @@ class AgentService:
 
         return { "session_id": session_id, "message_id": new_msg_ids[0] }
 
-    async def client_tool_result(
+    async def end_client_wait_action(
+        self,
+        username: str,
+        session_id: str,
+    ):
+        """
+        客户端通知 wait action 结束
+        """
+        # Validate session permission
+        await self.session_manager.check_user_session(username, session_id)
+        
+        event = self.client_action_waiters.setdefault(session_id, asyncio.Event())
+        if not event.is_set():
+            event.set()
+
+        logger.info(f"[Agent] End wait action for session {session_id}")
+
+    async def receive_client_tool_result(
         self,
         username: str,
         session_id: str,
@@ -134,35 +153,13 @@ class AgentService:
         # Validate session permission
         await self.session_manager.check_user_session(username, session_id)
         
-        if session_id not in self.client_tool_waiters:
-            logger.warning(f"[Agent] No waiter found for session {session_id}")
-            return
-        
-        # Directly store the result
-        self.client_tool_waiters[session_id][tool_call_id] = {
+        waiter = self.client_tool_waiters.setdefault(session_id, {})
+        waiter[tool_call_id] = {
             "content": content,
             "summary": summary,
-        } if content else None
-        
-        logger.info(f"[Agent] Received client tool result for {tool_call_id}")
+        }
 
-    async def client_action_complete(
-        self,
-        username: str,
-        session_id: str,
-        action_call_id: str,
-    ):
-        """
-        客户端上报 action 执行结束
-        """
-        # Validate session permission
-        await self.session_manager.check_user_session(username, session_id)
-        
-        if action_call_id in self.pending_actions.get(session_id, set()):
-            self.pending_actions[session_id].remove(action_call_id)
-            logger.info(f"[Agent] Received client action complete for {action_call_id}")
-        else:
-            logger.warning(f"[Agent] No pending action found for session {session_id} and action {action_call_id}")
+        logger.info(f"[Agent] Received client tool result for {tool_call_id}")
 
     async def get_history(
         self,
@@ -225,8 +222,6 @@ class AgentService:
         tools = tools or []
 
         if not await self._check_active_time(session_id, active_time):
-            logger.info(f"[Agent] Think session {session_id} has been replaced by new request, exiting")
-            yield { "finish_reason": "stop" }
             return
 
         # Prepare memory
@@ -235,18 +230,20 @@ class AgentService:
             session_id=session_id, limit=ContextBuilder.MAX_MESSAGES
         )
 
-        # Prepare actions for LLM (Server-side actions are only loaded when there are client-side actions)
+        # Prepare actions for LLM - prepend wait action when client actions are present
         if actions:
-            server_actions = await self.action_manager.get_definitions()
-            client_actions = actions
-            send_actions = server_actions + client_actions
+            wait_action = {
+                "name": "wait",
+                "description": "Wait for client to signal continue before proceeding with subsequent output.",
+            }
+            send_actions = [wait_action] + actions
         else:
             send_actions = []
 
         # Prepare tools for LLM
-        server_tools = await self.tool_manager.get_definitions()
+        host_tools = await self.tool_manager.get_definitions()
         client_tools = tools
-        send_tools = server_tools + client_tools
+        send_tools = host_tools + client_tools
 
         # Prepare context for LLM
         send_messages = self.context_builder.build_context(
@@ -277,12 +274,6 @@ class AgentService:
         history.append(bot_message)
         yield bot_message
 
-        # Reset client tool waiters for this session before LLM call
-        self.client_tool_waiters[session_id] = {}
-        
-        # Reset pending actions for this session
-        self.pending_actions[session_id] = set()
-
         # Make LLM request
         try:
             request = {
@@ -296,16 +287,12 @@ class AgentService:
             }
             response = await LlmClient.factory(request["model"]).chat(**request)
 
-            # Action processing
-            server_action_names = [action["name"] for action in server_actions]
-            action_pattern = re.compile(r'<action-([\w-]+)(?:\s+args=["\']([^<>"\']*)["\'])?\s*/>', re.DOTALL)
+            # Action processing position
             last_action_end_pos = 0
             
             # Streaming response
             async for chunk in response:
                 if not await self._check_active_time(session_id, active_time):
-                    logger.info(f"[Agent] Think session {session_id} has been replaced by new request, exiting")
-                    yield { "finish_reason": "stop" }
                     return
                 
                 if not chunk.get("choices"):
@@ -328,42 +315,19 @@ class AgentService:
                 if delta.get("content"):
                     bot_message["content"] += delta["content"]
                     yield { "content": delta["content"] }
-                    
-                    # Detect and yield new action call
-                    # Temporarily disable actions in code blocks before searching
-                    temp_content = re.compile(r"(```[\s\S]+?```|`[^`\n]+?`|```[\s\S]+?$|`[^`\n]+?$)").sub(lambda match:
-                        match.group(0).replace('`', '·').replace('<action-', '<xxxxxx-')
-                    , bot_message["content"])
-                    # Find new action call after last detection
-                    match = action_pattern.search(temp_content, last_action_end_pos)
-                    if match:
-                        action_call = {
-                            "id": uuid.uuid4().hex[:8],
-                            "name": match.group(1),
-                            "args": match.group(2) or ""
-                        }
-                        last_action_end_pos = match.end()
-                        is_server_action = action_call["name"] in server_action_names
-                        
-                        # Add to pending actions
-                        self.pending_actions[session_id].add(action_call["id"])
-                        
-                        if is_server_action:
-                            if action_call["name"] == WaitAction.name:
-                                self.pending_actions[session_id].remove(action_call["id"])
-                                await self._wait_for_previous_actions(session_id)
-                            else:
-                                asyncio.create_task(self._execute_server_action(
-                                    session_id, action_call
-                                ))
-                        else:
-                            yield { "action_call": action_call }
-                        
-                        logger.info(
-                            f"[Agent] Call {'server' if is_server_action else 'client'} action "
-                            f"{action_call['name']} (id: {action_call['id']}), "
-                            f"args: {action_call['args']}, depth: {depth}"
-                        )
+
+                    # Detect next action call
+                    if actions:
+                        async for item in self._detect_action_call(
+                            content=bot_message["content"],
+                            last_end_pos=last_action_end_pos,
+                            session_id=session_id,
+                            depth=depth,
+                        ):
+                            if "action_call" in item:
+                                yield item
+                            elif "end_pos" in item:
+                                last_action_end_pos = item["end_pos"]
                 
                 # Handle tool calls
                 for tool_call in delta.get("tool_calls") or []:
@@ -390,53 +354,15 @@ class AgentService:
 
             # Deal with tool calls
             if bot_message.get("tool_calls"):
-                server_tool_names = [t["function"]["name"] for t in server_tools]
-
-                # Execute tool calls in original order
-                for tool_call in bot_message["tool_calls"]:
-                    if not await self._check_active_time(session_id, active_time):
-                        logger.info(f"[Agent] Think session {session_id} has been replaced by new request, exiting")
-                        yield { "finish_reason": "stop" }
-                        return
-                    
-                    is_server_tool = tool_call["function"]["name"] in server_tool_names
-                    
-                    # Start new tool message placeholder
-                    tool_message = self.session_manager.create_message({
-                        "role": "tool",
-                        "content": "",
-                        "name": tool_call["function"]["name"],
-                        "tool_call_id": tool_call["id"],
-                        "streaming": True,
-                    })
-
-                    # Add tool message placeholder to history
-                    history.append(tool_message)
-                    yield tool_message
-                    
-                    if is_server_tool:
-                        # Server tool: execute directly
-                        tool_result = await self.tool_manager.execute(tool_call)
-                        tool_message.update(tool_result)
-                    else:
-                        # Client tool: wait for result
-                        tool_result = await self._wait_for_client_tool_result(
-                            session_id=session_id,
-                            tool_call_id=tool_call["id"]
-                        )
-                        tool_message.update(tool_result)
-
-                    # Save tool message to session manager
-                    tool_message["streaming"] = False
-                    await self.session_manager.save_message(session_id, tool_message)
-
-                    logger.info(
-                        f"[Agent] Call {'server' if is_server_tool else 'client'} tool {tool_call['function']['name']}, "
-                        f"depth: {depth}, message: {json.dumps(tool_message, ensure_ascii=False)}"
-                    )
-                    
-                    # Send tool result
-                    yield { "content": tool_message.get("summary") or "" }
+                async for chunk in self._execute_tool_calls(
+                    tool_calls=bot_message["tool_calls"],
+                    host_tools=host_tools,
+                    session_id=session_id,
+                    active_time=active_time,
+                    history=history,
+                    depth=depth,
+                ):
+                    yield chunk
         except Exception as e:
             logger.error(f"[Agent] Think error: {e}")
             logger.exception(e)
@@ -466,6 +392,12 @@ class AgentService:
             should_continue = True
         # Complete
         if not should_continue:
+            # Remove client action waiter
+            if self.client_action_waiters.get(session_id):
+                del self.client_action_waiters[session_id]
+            # Remove client tool waiter
+            if self.client_tool_waiters.get(session_id):
+                del self.client_tool_waiters[session_id]
             logger.info(f"[Agent] Think {session_id} is complete")
             yield { "finish_reason": "complete" }
 
@@ -569,6 +501,123 @@ class AgentService:
             self.is_processing_memory_queue = False
             logger.info(f"[Agent] Finished processing memory queue")
 
+    async def _detect_action_call(
+        self,
+        content: str,
+        last_end_pos: int,
+        session_id: str,
+        depth: int,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Detect new action call in the content, skipping code blocks.
+        Yields each action call dict as it's found.
+        For wait actions, yields the action_call first (so frontend receives it),
+        then blocks waiting for client to signal continue.
+        """
+        code_block_pattern = re.compile(r"(```[\s\S]+?```|`[^`\n]+?`|```[\s\S]+?$|`[^`\n]+?$)")
+        action_pattern = re.compile(r'<action-([\w-]+)(?:\s+args=["\']([^<>"\']*)["\'])?\s*/>', re.DOTALL)
+
+        # Disable actions in code blocks before searching
+        content = code_block_pattern.sub(lambda match:
+            match.group(0).replace('`', '·').replace('<action-', '<xxxxxx-')
+        , content)
+
+        match = action_pattern.search(content, last_end_pos)
+        if not match:
+            return
+
+        action_call = {
+            "name": match.group(1),
+            "args": match.group(2) or "",
+        }
+        last_end_pos = match.end()
+
+        # Yield action_call to frontend
+        yield { "action_call": action_call }
+
+        # Yield position update for caller
+        yield { "end_pos": last_end_pos }
+
+        logger.info(
+            f"[Agent] <action-{action_call['name']} args=\"{action_call['args']}\" />, depth: {depth}"
+        )
+
+        # For wait action, block after yielding
+        if action_call["name"] == "wait":
+            await self._wait_for_client_actions(session_id)
+
+    async def _wait_for_client_actions(self, session_id: str):
+        """
+        Wait for client to signal continue after a wait action.
+        Uses asyncio.Event for efficient blocking per session.
+        """
+        event = self.client_action_waiters.setdefault(session_id, asyncio.Event())
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=30)
+            event.clear()
+            logger.info(f"[Agent] Client continue received, session_id: {session_id}")
+        except asyncio.TimeoutError:
+            logger.warning(f"[Agent] Wait for client continue timed out, session_id: {session_id}")
+
+    async def _execute_tool_calls(
+        self,
+        tool_calls: List[Dict[str, Any]],
+        host_tools: List[Dict[str, Any]],
+        session_id: str,
+        active_time: float,
+        history: List[Dict[str, Any]],
+        depth: int,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Execute all tool calls in order.
+        Yields tool message placeholders and content chunks.
+        """
+        host_tool_names = [t["function"]["name"] for t in host_tools]
+
+        for tool_call in tool_calls:
+            if not await self._check_active_time(session_id, active_time):
+                return
+
+            is_host_tool = tool_call["function"]["name"] in host_tool_names
+
+            # Start new tool message placeholder
+            tool_message = self.session_manager.create_message({
+                "role": "tool",
+                "content": "",
+                "name": tool_call["function"]["name"],
+                "tool_call_id": tool_call["id"],
+                "streaming": True,
+            })
+
+            # Add tool message placeholder to history
+            history.append(tool_message)
+            yield tool_message
+
+            if is_host_tool:
+                # Host tool: execute directly
+                tool_result = await self.tool_manager.execute(tool_call)
+                tool_message.update(tool_result)
+            else:
+                # Client tool: wait for result
+                tool_result = await self._wait_for_client_tool_result(
+                    session_id=session_id,
+                    tool_call_id=tool_call["id"]
+                )
+                tool_message.update(tool_result)
+
+            # Save tool message to session manager
+            tool_message["streaming"] = False
+            await self.session_manager.save_message(session_id, tool_message)
+
+            # Send tool result
+            yield {"content": tool_message.get("summary") or ""}
+
+            logger.info(
+                f"[Agent] Call {'host' if is_host_tool else 'client'} tool {tool_call['function']['name']}, "
+                f"depth: {depth}, message: {json.dumps(tool_message, ensure_ascii=False)}"
+            )
+
     async def _wait_for_client_tool_result(
         self,
         session_id: str,
@@ -577,43 +626,16 @@ class AgentService:
         """
         轮询等待 client tool 结果回传
         """
-        expire_at = time.time() + 30
+        waiter = self.client_tool_waiters.setdefault(session_id, {})
+        expire_at = time.time() + 60
         
         while time.time() < expire_at:
-            if self.client_tool_waiters.get(session_id, {}).get(tool_call_id):
-                return self.client_tool_waiters[session_id][tool_call_id]
-            await asyncio.sleep(1)
+            if waiter.get(tool_call_id):
+                return waiter[tool_call_id]
+            await asyncio.sleep(0.1)
         
         logger.warning(f"[Agent] Client tool {tool_call_id} timed out")
         return {
             "content": json.dumps({"error": "Timeout or no response from client tool."}),
             "summary": "Client timeout or no response"
         }
-
-    async def _wait_for_previous_actions(self, session_id: str):
-        """Wait for previous actions to complete"""
-        if not self.pending_actions.get(session_id):
-            return
-        
-        logger.debug(f"[Agent] Waiting for previous actions to complete, session_id: {session_id}")
-        
-        expire_at = time.time() + 15
-        while time.time() < expire_at:
-            if not self.pending_actions.get(session_id):
-                return
-            await asyncio.sleep(1)
-
-        logger.warning(f"[Agent] Waiting for previous actions to complete timed out, session_id: {session_id}")
-        
-        # Clear pending actions for this session, to avoid blocking future actions.
-        self.pending_actions[session_id].clear()
-
-    async def _execute_server_action(self, session_id: str, action_call: dict):
-        """Execute a server action and remove it from pending when done"""
-        try:
-            await self.action_manager.execute(action_call)
-        finally:
-            if action_call["id"] in self.pending_actions.get(session_id, set()):
-                self.pending_actions[session_id].remove(action_call["id"])
-                logger.debug(f"[Agent] Removed server action {action_call['id']} from pending, session: {session_id}")
-    

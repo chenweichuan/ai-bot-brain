@@ -1,19 +1,19 @@
-from .operate_computer import OperateComputerTool
-from .operate_browser import OperateBrowserTool
-from .capture_browser import CaptureBrowserTool
-from .read_file import ReadFileTool
-from .write_file import WriteFileTool
-from .patch_file import PatchFileTool
-from .generate_file_links import GenerateFileLinksTool
-from .delete_file_links import DeleteFileLinksTool
+from .operate_host_system import OperateHostSystemTool
+from .operate_host_browser import OperateHostBrowserTool
+from .capture_host_browser import CaptureHostBrowserTool
+from .read_host_file import ReadHostFileTool
+from .write_host_file import WriteHostFileTool
+from .patch_host_file import PatchHostFileTool
+from .generate_host_file_links import GenerateHostFileLinksTool
+from .delete_host_file_links import DeleteHostFileLinksTool
 
 __all__ = [
-    "OperateComputerTool",
-    "OperateBrowserTool",
-    "CaptureBrowserTool",
-    "ReadFileTool",
-    "WriteFileTool",
-    "PatchFileTool",
-    "GenerateFileLinksTool",
-    "DeleteFileLinksTool",
+    "OperateHostSystemTool",
+    "OperateHostBrowserTool",
+    "CaptureHostBrowserTool",
+    "ReadHostFileTool",
+    "WriteHostFileTool",
+    "PatchHostFileTool",
+    "GenerateHostFileLinksTool",
+    "DeleteHostFileLinksTool",
 ]

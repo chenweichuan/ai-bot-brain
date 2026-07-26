@@ -3,7 +3,6 @@ API接口 - 暴露service层的HTTP接口
 """
 import json
 import os
-import time
 from typing import Optional, List
 from aiohttp import web
 from aiohttp.web import StreamResponse
@@ -361,8 +360,8 @@ async def get_short_link(request: web.Request) -> web.Response:
     获取短链接
     """
     try:
-        data = await _get_post_data(request)
-        result = await primitives_service.get_short_link(**data)
+        link = request.query.get("link")
+        result = await primitives_service.get_short_link(link=link)
         return web.Response(text=result)
     except Exception as e:
         logger.error(f"[API] Short link error: {e}")
@@ -375,11 +374,8 @@ async def redirect_by_token(request: web.Request) -> web.Response:
     通过token获取短链接并重定向
     """
     try:
-        token = request.match_info.get('token', '')
-        
-        # 调用get_link_by_token获取链接
+        token = request.match_info.get('token')
         link = await primitives_service.get_link_by_token(token=token)
-        
         if not link or not link.startswith("http"):
             return web.Response(text="Link not found", status=404)
         else:
@@ -442,8 +438,10 @@ async def think(request: web.Request) -> web.Response:
     await response.prepare(request)
 
     try:
+        username = request.query.get("username")
         data = await request.json()
-        async for chunk in agent_service.think(**data):
+        
+        async for chunk in agent_service.think(**data, username=username):
             await response.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode('utf-8'))
     except Exception as e:
         logger.error(f"[API] Agent think error: {e}")
@@ -452,41 +450,21 @@ async def think(request: web.Request) -> web.Response:
 
     return response
 
-async def message(request: web.Request) -> web.Response:
+async def receive_message(request: web.Request) -> web.Response:
     """
     保存用户消息到会话
     """
     try:
+        username = request.query.get("username")
         data = await request.json()
-        result = await agent_service.message(**data)
+        
+        result = await agent_service.receive_message(**data, username=username)
         return web.json_response(
             result,
             dumps=lambda obj: json.dumps(obj, ensure_ascii=False)
         )
     except Exception as e:
         logger.error(f"[API] Agent message error: {e}")
-        logger.exception(e)
-        return web.Response(text=str(e), status=500)
-
-async def client_tool_result(request: web.Request) -> web.Response:
-    """提交 client tool 执行结果"""
-    try:
-        data = await request.json()
-        await agent_service.client_tool_result(**data)
-        return web.Response(text="success")
-    except Exception as e:
-        logger.error(f"[API] Client tool result error: {e}")
-        logger.exception(e)
-        return web.Response(text=str(e), status=500)
-
-async def client_action_complete(request: web.Request) -> web.Response:
-    """客户端上报 action 执行结束"""
-    try:
-        data = await request.json()
-        await agent_service.client_action_complete(**data)
-        return web.Response(text="success")
-    except Exception as e:
-        logger.error(f"[API] Client action complete error: {e}")
         logger.exception(e)
         return web.Response(text=str(e), status=500)
 
@@ -501,6 +479,32 @@ async def get_history(request: web.Request) -> web.Response:
         )
     except Exception as e:
         logger.error(f"[API] Get agent history error: {e}")
+        logger.exception(e)
+        return web.Response(text=str(e), status=500)
+
+async def end_client_wait_action(request: web.Request) -> web.Response:
+    """客户端通知 wait action 可以继续"""
+    try:
+        username = request.query.get("username")
+        data = await request.json()
+        
+        await agent_service.end_client_wait_action(**data, username=username)
+        return web.Response(text="success")
+    except Exception as e:
+        logger.error(f"[API] Action wait continue error: {e}")
+        logger.exception(e)
+        return web.Response(text=str(e), status=500)
+
+async def receive_client_tool_result(request: web.Request) -> web.Response:
+    """提交 client tool 执行结果"""
+    try:
+        username = request.query.get("username")
+        data = await request.json()
+        
+        await agent_service.receive_client_tool_result(**data, username=username)
+        return web.Response(text="success")
+    except Exception as e:
+        logger.error(f"[API] Client tool result error: {e}")
         logger.exception(e)
         return web.Response(text=str(e), status=500)
 
@@ -542,8 +546,8 @@ async def presence_chat(request: web.Request) -> web.Response:
     Designed to reside in external agent environments.
     """
     try:
+        username = request.query.get("username")
         data = await request.json()
-        username = data.pop("username", None)
 
         if data.get("stream"):
             # 流式响应
@@ -600,11 +604,11 @@ def create_app() -> web.Application:
     app.router.add_post("/primitives/speech/text-to-speech", text_to_speech)
     
     # Web Primitives Endpoints
-    app.router.add_get("/primitives/web/get-search-options", get_search_options)
+    app.router.add_get("/primitives/web/search-options", get_search_options)
     app.router.add_post("/primitives/web/search-web", search_web)
     app.router.add_post("/primitives/web/scrape-webpage", scrape_webpage)
     app.router.add_post("/primitives/web/download-webpage", download_webpage)
-    app.router.add_post("/primitives/web/get-short-link", get_short_link)
+    app.router.add_get("/primitives/web/short-link", get_short_link)
     app.router.add_get("/primitives/web/redirect-link/{token}", redirect_by_token)
     
     # QRCode Primitives Endpoints
@@ -613,10 +617,10 @@ def create_app() -> web.Application:
 
     # Agent Endpoints
     app.router.add_post("/agent/think", think)
-    app.router.add_post("/agent/message", message)
-    app.router.add_post("/agent/client-tool-result", client_tool_result)
-    app.router.add_post("/agent/client-action-complete", client_action_complete)
-    app.router.add_get("/agent/get-history", get_history)
+    app.router.add_post("/agent/message", receive_message)
+    app.router.add_get("/agent/history", get_history)
+    app.router.add_post("/agent/client/tool-result", receive_client_tool_result)
+    app.router.add_post("/agent/client/end-wait-action", end_client_wait_action)
 
     # Presence Endpoints - OpenAI-compatible, /presence/.../completions
     app.router.add_post("/presence{tail:.*}/chat/completions", presence_chat)

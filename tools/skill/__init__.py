@@ -1,7 +1,7 @@
-"""
-Skill tools package
-"""
-from .list_skills import ListSkillsTool
-from .read_skill import ReadSkillTool
+from .list_host_skills import ListHostSkillsTool
+from .read_host_skill import ReadHostSkillTool
 
-__all__ = ["ListSkillsTool", "ReadSkillTool"]
+__all__ = [
+    "ListHostSkillsTool",
+    "ReadHostSkillTool",
+]

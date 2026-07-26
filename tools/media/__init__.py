@@ -1,17 +1,17 @@
-from .load_image_content import LoadImageContentTool
+from .analyze_image import AnalyzeImageTool
 from .generate_image import GenerateImageTool
-from .load_voice_content import LoadVoiceContentTool
+from .transcribe_voice import TranscribeVoiceTool
 from .synthesize_voice import SynthesizeVoiceTool
-from .load_video_content import LoadVideoContentTool
+from .analyze_video import AnalyzeVideoTool
 from .recognize_qrcode import RecognizeQRCodeTool
 from .generate_qrcode import GenerateQRCodeTool
 
 __all__ = [
-    "LoadImageContentTool",
+    "AnalyzeImageTool",
     "GenerateImageTool",
-    "LoadVoiceContentTool",
+    "TranscribeVoiceTool",
     "SynthesizeVoiceTool",
-    "LoadVideoContentTool",
+    "AnalyzeVideoTool",
     "RecognizeQRCodeTool",
     "GenerateQRCodeTool",
 ]
