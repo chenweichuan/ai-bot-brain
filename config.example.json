@@ -17,8 +17,8 @@
     "db": 0,
     "password": ""
   },
-  "chat_model": "doubao-seed-2.0-lite",
-  "memory_model": "doubao-seed-2.0-lite",
+  "chat_model": "doubao-seed-2.1-turbo",
+  "memory_model": "doubao-seed-2.1-turbo",
   "image_model": "doubao-seedream-5.0-lite",
   "round_limit_think": 100,
   "rate_limit_image": 5,

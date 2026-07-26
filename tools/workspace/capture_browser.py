@@ -25,7 +25,7 @@ class CaptureBrowserTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Capture current active tab page content from browser, "
+                "description": "Capture current active tab page content from your browser, "
                     "supports screenshot, get URL, get text content, extract element info, get cookies, and element screenshot",
                 "parameters": {
                     "type": "object",

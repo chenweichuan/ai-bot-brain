@@ -33,12 +33,14 @@ class ContextBuilder:
         history: List[Dict[str, Any]] = None,
         memory: str = "",
         instructions: str = "",
+        actions: List[Dict[str, str]] = None,
         tools: List[Dict[str, Any]] = None,
         max_text_units: int = MAX_TEXT_UNITS,
         max_messages: int = MAX_MESSAGES,
     ) -> List[Dict[str, Any]]:
         """Prepare messages for LLM request"""
         history = copy.deepcopy(history or [])
+        actions = actions or []
         tools = tools or []
         max_text_units = min(abs(max_text_units), self.MAX_TEXT_UNITS)
         max_messages = min(abs(max_messages), self.MAX_MESSAGES)
@@ -47,6 +49,7 @@ class ContextBuilder:
         system_message = self.build_system_message(
             memory=memory,
             instructions=instructions,
+            actions=actions,
             tools=tools,
         )
         
@@ -111,8 +114,10 @@ class ContextBuilder:
         self,
         memory: str = "",
         instructions: str = "",
+        actions: List[Dict[str, str]] = None,
         tools: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        actions = actions or []
         tools = tools or []
 
         owner_name = conf().get("owner_name", "")
@@ -143,6 +148,18 @@ class ContextBuilder:
             "------"
         )
 
+        if actions:
+            prompts.append(
+                "You can trigger actions, interleaved directly in content output using format: <action-NAME args=\"VALUE\" />\n"
+                "------\n"
+                + "\n".join(
+                    f"- <action-{action['name']} args=\"{action.get('args') or ''}\" /> - {action['description']}"
+                    for action in actions
+                )
+                + "\n------\n"
+                + "Note: Do NOT use actions not listed above. Each action tag must be on its own separate line."
+            )
+
         if tools:
             prompts.append(
                 "Your available tools:\n"
@@ -160,7 +177,7 @@ class ContextBuilder:
         prompts.append(role_prompt)
 
         if instructions:
-            prompts.append("------ [Client Instructions] ------")
+            prompts.append("------ [Instructions] ------")
             prompts.append(instructions)
  
         return {

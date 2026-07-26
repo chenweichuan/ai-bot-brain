@@ -38,7 +38,7 @@ class OperateBrowserTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Operate browser to perform web interaction actions, including navigation, dialog interaction, execute JavaScript, etc. "
+                "description": "Operate your browser to perform web interaction actions, including navigation, dialog interaction, execute JavaScript, etc. "
                     "Supports multi-tab management with operations to open new tab, switch tab, list tabs, and close tab. "
                     "Max supported tabs: 10.",
                 "parameters": {
