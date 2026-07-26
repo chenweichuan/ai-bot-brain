@@ -260,24 +260,27 @@ class ImpressionManager(ImpressMemManager):
         # Execute each tool call
         await self.execute_maintain_tool_calls(maintenance_tool_calls)
 
-        # Collect all save impression tool calls from memory_message and new turn-of-conversation messages
-        all_save_impression_tool_calls = [
-            tc for tc in maintenance_tool_calls if tc["function"]["name"] == self.save_impression_tool.name
+        # Collect all save impressions tool calls from maintenance and new turn-of-conversation messages
+        all_save_impressions_tool_calls = [
+            tc for tc in maintenance_tool_calls if tc["function"]["name"] == self.save_impressions_tool.name
         ]
         for message in messages:
-            all_save_impression_tool_calls.extend([
+            all_save_impressions_tool_calls.extend([
                 tc for tc in message.get("tool_calls") or []
-                if tc["function"]["name"] == self.save_impression_tool.name
+                if tc["function"]["name"] == self.save_impressions_tool.name
             ])
 
-        # Save clue message IDs
+        # Save clue message IDs (batch API: iterate over impressions array)
         clue_message_ids = [msg["id"] for msg in messages if msg.get("id")]
         if clue_message_ids:
-            for tool_call in all_save_impression_tool_calls:
+            for tool_call in all_save_impressions_tool_calls:
                 try:
                     arguments = tool_call["function"]["arguments"]
                     args = json.loads(arguments) if arguments else {}
-                    clue: str = args.get("clue", "").strip()
-                    await self.save_clue_message_ids(clue, clue_message_ids)
+                    impressions = args.get("impressions", [])
+                    for imp in impressions:
+                        clue: str = imp.get("clue", "").strip()
+                        if clue:
+                            await self.save_clue_message_ids(clue, clue_message_ids)
                 except Exception as e:
                     logger.error(f"[ImpressionManager] Failed to save clue message IDs: {e}")
