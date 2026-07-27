@@ -18,7 +18,7 @@
     "password": ""
   },
   "chat_model": "doubao-seed-2.1-turbo",
-  "memory_model": "doubao-seed-2.1-turbo",
+  "memory_model": "doubao-seed-2.0-lite",
   "image_model": "doubao-seedream-5.0-lite",
   "round_limit_think": 100,
   "rate_limit_image": 5,
@@ -33,7 +33,11 @@
       "name": "zhipuai",
       "api_base": "https://open.bigmodel.cn/api/paas/v4",
       "api_key": "your_zhipuai_api_key",
-      "prefixes": ["glm-"]
+      "prefixes": ["glm-"],
+      "vision_fallback": {
+        "glm-4.7": "glm-4.6v",
+        "glm-5.2": "glm-5v-turbo"
+      }
     },
     {
       "name": "googleai",

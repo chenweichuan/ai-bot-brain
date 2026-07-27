@@ -7,7 +7,7 @@ from providers.content_moderation.enums import FileType, CheckResult, CheckStatu
 from providers.content_moderation.aliyun import AliyunContentModeration
 
 
-# 文件扩展名映射
+# File extension mappings
 IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff', 'tif'}
 AUDIO_EXTENSIONS = {'mp3', 'wav', 'aac', 'flac', 'm4a', 'ogg', 'wma', 'opus'}
 VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'mts'}
@@ -15,13 +15,13 @@ DOCUMENT_EXTENSIONS = {'txt', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'
 
 
 class ContentModerationClient:
-    """内容审核客户端"""
+    """Content moderation client"""
 
     _instance: Optional['ContentModerationClient'] = None
 
     @classmethod
     def get_instance(cls):
-        """获取单例实例"""
+        """Get singleton instance"""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -30,13 +30,13 @@ class ContentModerationClient:
         self.enabled = False
         self.provider = None
         self.adapter = None
-        self.fallback_action = "reject"  # reject 或 allow
+        self.fallback_action = "reject"  # reject or allow
         self.reject_log_only = False
 
         self._load_config()
 
     def _load_config(self):
-        """加载配置"""
+        """Load configuration"""
         config = conf().get("content_moderation", {})
         self.enabled = config.get("enabled", False)
         self.provider = config.get("provider", "aliyun")
@@ -44,33 +44,33 @@ class ContentModerationClient:
         self.reject_log_only = config.get("reject_log_only", False)
 
         if not self.enabled:
-            logger.info("[ContentModeration] 内容审核未启用")
+            logger.info("[ContentModeration] Content moderation is not enabled")
             return
 
         if self.provider == "aliyun":
             aliyun_config = config.get("aliyun", {})
             self.adapter = AliyunContentModeration(aliyun_config)
-            logger.info("[ContentModeration] 阿里云内容审核初始化成功")
+            logger.info("[ContentModeration] Aliyun content moderation initialized successfully")
         else:
-            logger.warning(f"[ContentModeration] 不支持的审核服务商: {self.provider}")
+            logger.warning(f"[ContentModeration] Unsupported moderation provider: {self.provider}")
             self.enabled = False
 
     def is_enabled(self) -> bool:
-        """是否启用审核"""
+        """Check if moderation is enabled"""
         return self.enabled and self.adapter is not None
 
     @staticmethod
     def detect_file_type_from_url(url: str) -> FileType:
         """
-        从URL识别文件类型
+        Detect file type from URL
 
         Args:
-            url: 文件公网URL
+            url: Public URL of the file
 
         Returns:
             FileType
         """
-        # 通过URL路径判断
+        # Determine by URL path
         path_part = url.split('?')[0].split('#')[0]
         ext = path_part.split('.')[-1].lower() if '.' in path_part else ''
         if ext:
@@ -87,16 +87,16 @@ class ContentModerationClient:
 
     async def check_file(self, file_url: str) -> CheckResult:
         """
-        审核文件
+        Moderate a file
 
         Args:
-            file_url: 文件公网URL
+            file_url: Public URL of the file
 
         Returns:
             CheckResult
         """
         if not self.is_enabled():
-            return CheckResult(CheckStatus.PASS, "审核未启用")
+            return CheckResult(CheckStatus.PASS, "Moderation not enabled")
 
         file_type = self.detect_file_type_from_url(file_url)
 
@@ -109,105 +109,103 @@ class ContentModerationClient:
         elif file_type == FileType.DOCUMENT:
             return await self.check_document(file_url)
         else:
-            return CheckResult(CheckStatus.PASS, "非审核文件类型，跳过")
+            return CheckResult(CheckStatus.PASS, "Non-moderation file type, skipped")
 
     async def check_image(self, image_url: str) -> CheckResult:
         """
-        审核图片
+        Moderate an image
 
         Args:
-            image_url: 图片公网URL
+            image_url: Public URL of the image
         """
         if not self.is_enabled():
-            return CheckResult(CheckStatus.PASS, "审核未启用")
+            return CheckResult(CheckStatus.PASS, "Moderation not enabled")
 
         try:
             result = await self.adapter.check_image(image_url)
-            self._log_result("图片", result)
+            self._log_result("Image", result)
             return self._apply_fallback(result)
         except Exception as e:
-            logger.error(f"[ContentModeration] 图片审核异常: {e}")
+            logger.error(f"[ContentModeration] Image moderation error: {e}")
             return self._get_fallback_result(str(e))
 
     async def check_audio(self, audio_url: str) -> CheckResult:
         """
-        审核音频
+        Moderate an audio file
 
         Args:
-            audio_url: 音频公网URL
+            audio_url: Public URL of the audio file
         """
         if not self.is_enabled():
-            return CheckResult(CheckStatus.PASS, "审核未启用")
+            return CheckResult(CheckStatus.PASS, "Moderation not enabled")
 
         try:
             result = await self.adapter.check_audio(audio_url)
-            self._log_result("音频", result)
+            self._log_result("Audio", result)
             return self._apply_fallback(result)
         except Exception as e:
-            logger.error(f"[ContentModeration] 音频审核异常: {e}")
+            logger.error(f"[ContentModeration] Audio moderation error: {e}")
             return self._get_fallback_result(str(e))
 
     async def check_video(self, video_url: str) -> CheckResult:
         """
-        审核视频
+        Moderate a video
 
         Args:
-            video_url: 视频公网URL
+            video_url: Public URL of the video
         """
         if not self.is_enabled():
-            return CheckResult(CheckStatus.PASS, "审核未启用")
+            return CheckResult(CheckStatus.PASS, "Moderation not enabled")
 
         try:
             result = await self.adapter.check_video(video_url)
-            self._log_result("视频", result)
+            self._log_result("Video", result)
             return self._apply_fallback(result)
         except Exception as e:
-            logger.error(f"[ContentModeration] 视频审核异常: {e}")
+            logger.error(f"[ContentModeration] Video moderation error: {e}")
             return self._get_fallback_result(str(e))
 
     async def check_document(self, doc_url: str) -> CheckResult:
         """
-        审核文档
+        Moderate a document
 
         Args:
-            doc_url: 文档公网URL
+            doc_url: Public URL of the document
         """
         if not self.is_enabled():
-            return CheckResult(CheckStatus.PASS, "审核未启用")
+            return CheckResult(CheckStatus.PASS, "Moderation not enabled")
 
         try:
             result = await self.adapter.check_document(doc_url)
-            self._log_result("文档", result)
+            self._log_result("Document", result)
             return self._apply_fallback(result)
         except Exception as e:
-            logger.error(f"[ContentModeration] 文档审核异常: {e}")
+            logger.error(f"[ContentModeration] Document moderation error: {e}")
             return self._get_fallback_result(str(e))
 
     def _log_result(self, file_type: str, result: CheckResult):
-        """记录审核结果日志"""
+        """Log moderation result"""
         if result.is_pass():
-            logger.info(f"[ContentModeration] {file_type}审核通过")
+            logger.info(f"[ContentModeration] {file_type} moderation passed")
         elif result.is_block():
-            logger.warning(f"[ContentModeration] {file_type}审核拒绝: {result.message}")
+            logger.warning(f"[ContentModeration] {file_type} moderation blocked: {result.message}")
         elif result.is_review():
-            logger.warning(f"[ContentModeration] {file_type}需人工复核: {result.message}")
+            logger.warning(f"[ContentModeration] {file_type} needs manual review: {result.message}")
         else:
-            logger.error(f"[ContentModeration] {file_type}审核出错: {result.message}")
+            logger.error(f"[ContentModeration] {file_type} moderation error: {result.message}")
 
     def _apply_fallback(self, result: CheckResult) -> CheckResult:
-        """应用降级策略"""
+        """Apply fallback strategy"""
         if result.is_block() and self.reject_log_only:
-            logger.warning(f"[ContentModeration] reject_log_only=true，只记录日志，不阻止")
-            return CheckResult(CheckStatus.PASS, "降级通过（仅记录日志）")
+            logger.warning(f"[ContentModeration] reject_log_only=true, logging only, not blocking")
+            return CheckResult(CheckStatus.PASS, "Fallback pass (log only)")
         return result
 
     def _get_fallback_result(self, error_msg: str) -> CheckResult:
-        """获取降级结果"""
+        """Get fallback result"""
         if self.fallback_action == "allow":
-            logger.warning(f"[ContentModeration] 审核失败，降级通过: {error_msg}")
-            return CheckResult(CheckStatus.PASS, f"降级通过: {error_msg}")
+            logger.warning(f"[ContentModeration] Moderation failed, fallback allow: {error_msg}")
+            return CheckResult(CheckStatus.PASS, f"Fallback pass: {error_msg}")
         else:
-            logger.error(f"[ContentModeration] 审核失败，降级拒绝: {error_msg}")
-            return CheckResult(CheckStatus.ERROR, f"审核失败: {error_msg}")
-
-
+            logger.error(f"[ContentModeration] Moderation failed, fallback reject: {error_msg}")
+            return CheckResult(CheckStatus.ERROR, f"Moderation failed: {error_msg}")

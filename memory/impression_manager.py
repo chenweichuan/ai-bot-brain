@@ -9,9 +9,27 @@ from common.log import logger
 from common.message import count_text_units, stringify_message
 from config import conf
 from providers.llm.client import LlmClient
-from impressmem import ImpressMemConfig, ImpressMemManager, slice_new_turn_messages
+from impressmem import (
+    ImpressMemConfig,
+    ImpressMemManager,
+    slice_new_turn_messages
+)
+from impressmem.tools import (
+    SaveImpressionsTool,
+    OrganizeImpressionsTool,
+    RecallImpressionsTool,
+)
 
 from memory.context_builder import ContextBuilder
+
+# Re-export for internal module convenience
+__all__ = [
+    "ImpressionManager",
+    "slice_new_turn_messages",
+    "SaveImpressionsTool",
+    "OrganizeImpressionsTool",
+    "RecallImpressionsTool",
+]
 
 
 class ImpressionManager(ImpressMemManager):
@@ -205,7 +223,7 @@ class ImpressionManager(ImpressMemManager):
         messages: List[Dict[str, Any]],
         username: str = None,
         instructions: str = "",
-        model: str = conf().get("memory_model"),
+        model: str = None,
     ) -> None:
         """
         Save impression entries based on the messages
@@ -217,12 +235,13 @@ class ImpressionManager(ImpressMemManager):
             username: Username of the user
         """
         # Make LLM request to save or organize impressions using impressmem's tools directly
+        model = model if model and model != "default" else conf().get("memory_model")
         memory_context = await self.build_memory_context()
 
         # Get tool definitions directly from impressmem tools
         send_tools = self.get_maintain_tool_definitions()
         
-        # Build context, limited messages
+        # Build context
         send_messages = self.context_builder.build_context(
             history=messages,
             memory=memory_context,
@@ -284,3 +303,4 @@ class ImpressionManager(ImpressMemManager):
                             await self.save_clue_message_ids(clue, clue_message_ids)
                 except Exception as e:
                     logger.error(f"[ImpressionManager] Failed to save clue message IDs: {e}")
+

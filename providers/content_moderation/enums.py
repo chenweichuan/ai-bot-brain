@@ -3,7 +3,7 @@ from enum import Enum
 
 
 class FileType(Enum):
-    """文件类型"""
+    """File type"""
     IMAGE = "image"
     AUDIO = "audio"
     VIDEO = "video"
@@ -12,16 +12,16 @@ class FileType(Enum):
 
 
 class CheckStatus(Enum):
-    """审核状态"""
-    PASS = "pass"          # 通过
-    BLOCK = "block"        # 拒绝
-    REVIEW = "review"      # 需人工复核
-    ERROR = "error"        # 审核出错
-    TIMEOUT = "timeout"    # 审核超时
+    """Check status"""
+    PASS = "pass"          # pass
+    BLOCK = "block"        # block
+    REVIEW = "review"      # needs manual review
+    ERROR = "error"        # check error
+    TIMEOUT = "timeout"    # check timeout
 
 
 class CheckResult:
-    """审核结果"""
+    """Check result"""
     def __init__(self, status: CheckStatus, message: str = "", details: dict = None):
         self.status = status
         self.message = message

@@ -37,6 +37,7 @@ class ContextBuilder:
         tools: List[Dict[str, Any]] = None,
         max_text_units: int = MAX_TEXT_UNITS,
         max_messages: int = MAX_MESSAGES,
+        max_model_rounds: int = MAX_MODEL_ROUNDS,
     ) -> List[Dict[str, Any]]:
         """Prepare messages for LLM request"""
         history = copy.deepcopy(history or [])
@@ -57,10 +58,11 @@ class ContextBuilder:
         system_message_text_units = count_messages_text_units([system_message])
 
         # Filter history
-        history = self._filter_history(
-            history,
-            max_text_units - system_message_text_units,
-            max_messages - 1
+        history = self.filter_history(
+            history=history,
+            max_text_units=max_text_units - system_message_text_units,
+            max_messages=max_messages - 1,
+            max_model_rounds=max_model_rounds,
         )
 
         # Combine system message and history
@@ -185,7 +187,13 @@ class ContextBuilder:
             "content": "\n\n".join(prompts),
         }
 
-    def _filter_history(self, history: List[Dict[str, Any]], max_text_units: int, max_messages: int) -> List[Dict[str, Any]]:
+    def filter_history(
+        self,
+        history: List[Dict[str, Any]],
+        max_text_units: int = MAX_TEXT_UNITS,
+        max_messages: int = MAX_MESSAGES,
+        max_model_rounds: int = MAX_MODEL_ROUNDS,
+    ) -> List[Dict[str, Any]]:
         """Filter history messages"""
         # Filter valid messages
         history = [
@@ -209,8 +217,8 @@ class ContextBuilder:
 
         # Limit the number of model rounds
         all_assistant_idxes = [i for i, msg in enumerate(recent_history) if msg["role"] == "assistant"]
-        if len(all_assistant_idxes) > self.MAX_MODEL_ROUNDS:
-            recent_history = recent_history[all_assistant_idxes[-self.MAX_MODEL_ROUNDS]:]
+        if len(all_assistant_idxes) > max_model_rounds:
+            recent_history = recent_history[all_assistant_idxes[-max_model_rounds]:]
 
         # Get tool call IDs from call messages
         tool_call_ids_in_call_msgs = []

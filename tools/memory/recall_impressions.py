@@ -3,8 +3,7 @@ Impression recall tool that supports multi-dimensional query
 """
 from typing import Dict, Any
 from tools.base import Tool
-from memory.impression_manager import ImpressionManager
-from impressmem.tools.recall_impressions import RecallImpressionsTool as ImpressMemRecallTool
+from memory.impression_manager import ImpressionManager, RecallImpressionsTool as ImpressMemRecallTool
 
 
 class RecallImpressionsTool(Tool):

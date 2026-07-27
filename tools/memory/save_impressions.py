@@ -3,8 +3,7 @@ Memory save tool for saving multiple memory impressions in one batch call
 """
 from typing import Dict, Any
 from tools.base import Tool
-from memory.impression_manager import ImpressionManager
-from impressmem.tools.save_impressions import SaveImpressionsTool as ImpressMemSaveTool
+from memory.impression_manager import ImpressionManager, SaveImpressionsTool as ImpressMemSaveTool
 
 
 class SaveImpressionsTool(Tool):

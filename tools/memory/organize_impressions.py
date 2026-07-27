@@ -3,8 +3,7 @@ Impression organize tool for merging and organizing memory impression categories
 """
 from typing import Dict, Any
 from tools.base import Tool
-from memory.impression_manager import ImpressionManager
-from impressmem.tools.organize_impressions import OrganizeImpressionsTool as ImpressMemOrganizeTool
+from memory.impression_manager import ImpressionManager, OrganizeImpressionsTool as ImpressMemOrganizeTool
 
 
 class OrganizeImpressionsTool(Tool):

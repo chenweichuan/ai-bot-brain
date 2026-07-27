@@ -14,18 +14,18 @@ from providers.content_moderation.enums import CheckResult, CheckStatus
 
 
 class AliyunContentModeration:
-    """阿里云内容安全审核适配器"""
+    """Aliyun content security moderation adapter"""
 
     def __init__(self, config: Dict[str, Any]):
         """
-        初始化阿里云审核客户端
+        Initialize Aliyun moderation client
 
         Args:
-            config: 配置字典，包含:
-                - access_key_id: 阿里云AccessKey ID
-                - access_key_secret: 阿里云AccessKey Secret
-                - region_id: 区域ID，默认cn-shanghai
-                - endpoint: 接入点，默认green-cip.cn-shanghai.aliyuncs.com
+            config: Configuration dict containing:
+                - access_key_id: Aliyun AccessKey ID
+                - access_key_secret: Aliyun AccessKey Secret
+                - region_id: Region ID, default cn-shanghai
+                - endpoint: Endpoint, default green-cip.cn-shanghai.aliyuncs.com
         """
         self.access_key_id = config.get("access_key_id")
         self.access_key_secret = config.get("access_key_secret")
@@ -39,7 +39,7 @@ class AliyunContentModeration:
         self._runtime = util_models.RuntimeOptions()
 
     def _get_client(self, use_backup: bool = False) -> Client:
-        """获取审核客户端"""
+        """Get moderation client"""
         endpoint = self.backup_endpoint if use_backup else self.endpoint
         config = Config(
             access_key_id=self.access_key_id,
@@ -52,7 +52,7 @@ class AliyunContentModeration:
         return Client(config)
 
     async def _check_image_with_endpoint(self, image_url: str, use_backup: bool = False) -> CheckResult:
-        """使用指定接入点审核图片"""
+        """Moderate image using specified endpoint"""
         client = self._get_client(use_backup)
         data_id = str(uuid.uuid1())
 
@@ -75,38 +75,38 @@ class AliyunContentModeration:
                     result_data = result.data
                     return self._parse_image_result(result_data)
                 else:
-                    error_msg = getattr(result, 'msg', getattr(result, 'message', '未知错误'))
+                    error_msg = getattr(result, 'msg', getattr(result, 'message', 'Unknown error'))
                     return CheckResult(
                         CheckStatus.ERROR,
-                        f"审核失败: {error_msg}",
+                        f"Moderation failed: {error_msg}",
                         {"code": result.code}
                     )
             else:
                 return CheckResult(
                     CheckStatus.ERROR,
-                    f"请求失败: {response.status_code}"
+                    f"Request failed: {response.status_code}"
                 )
         except Exception as e:
-            logger.error(f"[AliyunModeration] 图片审核异常: {e}")
+            logger.error(f"[AliyunModeration] Image moderation error: {e}")
             return CheckResult(CheckStatus.ERROR, str(e))
 
     async def check_image(self, image_url: str) -> CheckResult:
         """
-        审核图片
+        Moderate an image
 
         Args:
-            image_url: 图片公网URL
+            image_url: Public URL of the image
         """
         result = await self._check_image_with_endpoint(image_url, use_backup=False)
 
         if result.status == CheckStatus.ERROR:
-            logger.info("[AliyunModeration] 主接入点失败，尝试备用接入点")
+            logger.info("[AliyunModeration] Primary endpoint failed, trying backup endpoint")
             result = await self._check_image_with_endpoint(image_url, use_backup=True)
 
         return result
 
     def _parse_image_result(self, result_data: Any) -> CheckResult:
-        """解析图片审核结果"""
+        """Parse image moderation result"""
         try:
             data_map = result_data.to_map() if hasattr(result_data, 'to_map') else result_data
             results = data_map.get("Result", [])
@@ -116,24 +116,24 @@ class AliyunContentModeration:
                 if risk_level != "none":
                     return CheckResult(
                         CheckStatus.BLOCK,
-                        f"检测到违规内容: {label} - {item.get('Description', '')}",
+                        f"Violation detected: {label} - {item.get('Description', '')}",
                         {"raw_result": data_map}
                     )
-            return CheckResult(CheckStatus.PASS, "审核通过", {"raw_result": data_map})
+            return CheckResult(CheckStatus.PASS, "Moderation passed", {"raw_result": data_map})
         except Exception as e:
-            logger.error(f"[AliyunModeration] 解析图片结果异常: {e}")
-            return CheckResult(CheckStatus.ERROR, f"结果解析失败: {e}")
+            logger.error(f"[AliyunModeration] Error parsing image result: {e}")
+            return CheckResult(CheckStatus.ERROR, f"Result parsing failed: {e}")
 
     async def _poll_async_result(self, task_id: str, result_type: str) -> Optional[Any]:
         """
-        轮询查询异步审核结果
+        Poll for async moderation result
 
         Args:
-            task_id: 任务ID
-            result_type: 结果类型 ('audio', 'video', 'document')
+            task_id: Task ID
+            result_type: Result type ('audio', 'video', 'document')
 
         Returns:
-            审核结果数据
+            Moderation result data
         """
         client = self._get_client()
 
@@ -154,13 +154,13 @@ class AliyunContentModeration:
                     return result
 
             except Exception as e:
-                logger.warning(f"[AliyunModeration] 查询{result_type}结果失败 (尝试 {attempt + 1}/{self.max_poll_attempts}): {e}")
+                logger.warning(f"[AliyunModeration] Failed to query {result_type} result (attempt {attempt + 1}/{self.max_poll_attempts}): {e}")
 
-        logger.error(f"[AliyunModeration] {result_type}审核结果查询超时")
+        logger.error(f"[AliyunModeration] {result_type} moderation result query timed out")
         return None
 
     async def _query_audio_result(self, client: Client, task_id: str) -> Optional[Any]:
-        """查询音频审核结果"""
+        """Query audio moderation result"""
         service_parameters = {"taskId": task_id}
         request = models.VoiceModerationResultRequest(
             service='audio_media_detection',
@@ -172,14 +172,14 @@ class AliyunContentModeration:
             result = response.body
             if result.code == 200:
                 data_map = result.data.to_map() if hasattr(result.data, 'to_map') else result.data
-                # 当code=200且包含RiskLevel时，任务已完成
+                # Task complete when code=200 and RiskLevel is present
                 if "RiskLevel" in data_map:
                     return result.data
-            # code=280或其他情况继续轮询
+            # code=280 or other cases: continue polling
         return None
 
     async def _query_video_result(self, client: Client, task_id: str) -> Optional[Any]:
-        """查询视频审核结果"""
+        """Query video moderation result"""
         service_parameters = {"taskId": task_id}
         request = models.VideoModerationResultRequest(
             service='videoDetection',
@@ -191,14 +191,14 @@ class AliyunContentModeration:
             result = response.body
             if result.code == 200:
                 data_map = result.data.to_map() if hasattr(result.data, 'to_map') else result.data
-                # 当code=200且包含RiskLevel时，任务已完成
+                # Task complete when code=200 and RiskLevel is present
                 if "RiskLevel" in data_map:
                     return result.data
-            # code=280或其他情况继续轮询
+            # code=280 or other cases: continue polling
         return None
 
     async def _query_document_result(self, client: Client, task_id: str) -> Optional[Any]:
-        """查询文档审核结果"""
+        """Query document moderation result"""
         service_parameters = {"taskId": task_id}
         request = models.DescribeFileModerationResultRequest(
             service='document_detection',
@@ -210,46 +210,46 @@ class AliyunContentModeration:
             result = response.body
             if result.code == 200:
                 data_map = result.data.to_map() if hasattr(result.data, 'to_map') else result.data
-                # 当code=200且包含RiskLevel时，任务已完成
+                # Task complete when code=200 and RiskLevel is present
                 if "RiskLevel" in data_map:
                     return result.data
-            # code=280或其他情况继续轮询
+            # code=280 or other cases: continue polling
         return None
 
     def _parse_async_result(self, result_data: Any) -> CheckResult:
-        """解析异步审核结果"""
+        """Parse async moderation result"""
         try:
             data_map = result_data.to_map() if hasattr(result_data, 'to_map') else result_data
             risk_level = data_map.get("RiskLevel", "none")
 
             if risk_level != "none":
-                # 检查是否有 Result 数组获取更多详情
+                # Check Result array for more details
                 results = data_map.get("Result", [])
                 if results:
                     item = results[0]
                     label = item.get("Label", "nonLabel")
                     return CheckResult(
                         CheckStatus.BLOCK,
-                        f"检测到违规内容: {label} - {item.get('Description', '')}",
+                        f"Violation detected: {label} - {item.get('Description', '')}",
                         {"raw_result": data_map}
                     )
                 return CheckResult(
                     CheckStatus.BLOCK,
-                    f"检测到违规内容: RiskLevel={risk_level}",
+                    f"Violation detected: RiskLevel={risk_level}",
                     {"raw_result": data_map}
                 )
 
-            return CheckResult(CheckStatus.PASS, "审核通过", {"raw_result": data_map})
+            return CheckResult(CheckStatus.PASS, "Moderation passed", {"raw_result": data_map})
         except Exception as e:
-            logger.error(f"[AliyunModeration] 解析异步结果异常: {e}")
-            return CheckResult(CheckStatus.ERROR, f"结果解析失败: {e}")
+            logger.error(f"[AliyunModeration] Error parsing async result: {e}")
+            return CheckResult(CheckStatus.ERROR, f"Result parsing failed: {e}")
 
     async def check_audio(self, audio_url: str) -> CheckResult:
         """
-        审核音频
+        Moderate an audio file
 
         Args:
-            audio_url: 音频公网URL
+            audio_url: Public URL of the audio file
         """
         client = self._get_client()
         service_parameters = {'url': audio_url}
@@ -268,32 +268,32 @@ class AliyunContentModeration:
                     task_id = data_map.get("TaskId")
 
                     if task_id:
-                        logger.info(f"[AliyunModeration] 音频任务已提交，任务ID: {task_id}")
+                        logger.info(f"[AliyunModeration] Audio task submitted, task ID: {task_id}")
                         final_result = await self._poll_async_result(task_id, 'audio')
                         if final_result:
                             return self._parse_async_result(final_result)
-                        return CheckResult(CheckStatus.TIMEOUT, "审核超时")
+                        return CheckResult(CheckStatus.TIMEOUT, "Moderation timed out")
                     else:
                         return self._parse_async_result(result.data)
                 else:
-                    error_msg = getattr(result, 'msg', getattr(result, 'message', '未知错误'))
-                    return CheckResult(CheckStatus.ERROR, f"审核失败: {error_msg}")
+                    error_msg = getattr(result, 'msg', getattr(result, 'message', 'Unknown error'))
+                    return CheckResult(CheckStatus.ERROR, f"Moderation failed: {error_msg}")
             else:
-                return CheckResult(CheckStatus.ERROR, f"请求失败: {response.status_code}")
+                return CheckResult(CheckStatus.ERROR, f"Request failed: {response.status_code}")
         except Exception as e:
-            logger.error(f"[AliyunModeration] 音频审核异常: {e}")
+            logger.error(f"[AliyunModeration] Audio moderation error: {e}")
             return CheckResult(CheckStatus.ERROR, str(e))
 
     def _parse_audio_result(self, result_data: Any) -> CheckResult:
-        """解析音频审核结果（兼容性保留）"""
+        """Parse audio moderation result (kept for compatibility)"""
         return self._parse_async_result(result_data)
 
     async def check_video(self, video_url: str) -> CheckResult:
         """
-        审核视频
+        Moderate a video
 
         Args:
-            video_url: 视频公网URL
+            video_url: Public URL of the video
         """
         client = self._get_client()
         service_parameters = {'url': video_url}
@@ -312,32 +312,32 @@ class AliyunContentModeration:
                     task_id = data_map.get("TaskId")
 
                     if task_id:
-                        logger.info(f"[AliyunModeration] 视频任务已提交，任务ID: {task_id}")
+                        logger.info(f"[AliyunModeration] Video task submitted, task ID: {task_id}")
                         final_result = await self._poll_async_result(task_id, 'video')
                         if final_result:
                             return self._parse_async_result(final_result)
-                        return CheckResult(CheckStatus.TIMEOUT, "审核超时")
+                        return CheckResult(CheckStatus.TIMEOUT, "Moderation timed out")
                     else:
                         return self._parse_async_result(result.data)
                 else:
-                    error_msg = getattr(result, 'msg', getattr(result, 'message', '未知错误'))
-                    return CheckResult(CheckStatus.ERROR, f"审核失败: {error_msg}")
+                    error_msg = getattr(result, 'msg', getattr(result, 'message', 'Unknown error'))
+                    return CheckResult(CheckStatus.ERROR, f"Moderation failed: {error_msg}")
             else:
-                return CheckResult(CheckStatus.ERROR, f"请求失败: {response.status_code}")
+                return CheckResult(CheckStatus.ERROR, f"Request failed: {response.status_code}")
         except Exception as e:
-            logger.error(f"[AliyunModeration] 视频审核异常: {e}")
+            logger.error(f"[AliyunModeration] Video moderation error: {e}")
             return CheckResult(CheckStatus.ERROR, str(e))
 
     def _parse_video_result(self, result_data: Any) -> CheckResult:
-        """解析视频审核结果（兼容性保留）"""
+        """Parse video moderation result (kept for compatibility)"""
         return self._parse_async_result(result_data)
 
     async def check_document(self, doc_url: str) -> CheckResult:
         """
-        审核文档
+        Moderate a document
 
         Args:
-            doc_url: 文档公网URL
+            doc_url: Public URL of the document
         """
         client = self._get_client()
         service_parameters = {'url': doc_url}
@@ -356,22 +356,22 @@ class AliyunContentModeration:
                     task_id = data_map.get("TaskId")
 
                     if task_id:
-                        logger.info(f"[AliyunModeration] 文档任务已提交，任务ID: {task_id}")
+                        logger.info(f"[AliyunModeration] Document task submitted, task ID: {task_id}")
                         final_result = await self._poll_async_result(task_id, 'document')
                         if final_result:
                             return self._parse_async_result(final_result)
-                        return CheckResult(CheckStatus.TIMEOUT, "审核超时")
+                        return CheckResult(CheckStatus.TIMEOUT, "Moderation timed out")
                     else:
                         return self._parse_async_result(result.data)
                 else:
-                    error_msg = getattr(result, 'msg', getattr(result, 'message', '未知错误'))
-                    return CheckResult(CheckStatus.ERROR, f"审核失败: {error_msg}")
+                    error_msg = getattr(result, 'msg', getattr(result, 'message', 'Unknown error'))
+                    return CheckResult(CheckStatus.ERROR, f"Moderation failed: {error_msg}")
             else:
-                return CheckResult(CheckStatus.ERROR, f"请求失败: {response.status_code}")
+                return CheckResult(CheckStatus.ERROR, f"Request failed: {response.status_code}")
         except Exception as e:
-            logger.error(f"[AliyunModeration] 文档审核异常: {e}")
+            logger.error(f"[AliyunModeration] Document moderation error: {e}")
             return CheckResult(CheckStatus.ERROR, str(e))
 
     def _parse_document_result(self, result_data: Any) -> CheckResult:
-        """解析文档审核结果（兼容性保留）"""
+        """Parse document moderation result (kept for compatibility)"""
         return self._parse_async_result(result_data)

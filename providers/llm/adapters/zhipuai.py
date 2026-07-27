@@ -77,6 +77,17 @@ class ZhipuaiLlmAdapter(LlmClient):
                 "type": "disabled",
             }
 
+        has_visual_content = any(
+            isinstance(msg.get("content"), list)
+            and any((part or {}).get("type") in ["image_url", "video_url"] for part in msg.get("content", []))
+            for msg in request.get("messages", [])
+        )
+        if has_visual_content:
+            # 视觉模型兼容映射
+            vision_fallback = API_CONFIG.get("vision_fallback", {})
+            vision_model = vision_fallback.get(request["model"]) if isinstance(vision_fallback, dict) else vision_fallback
+            request["model"] = vision_model
+
         headers = {
             "Authorization": f"Bearer {API_CONFIG['api_key']}",
             "Content-Type": "application/json"

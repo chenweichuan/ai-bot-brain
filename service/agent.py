@@ -213,6 +213,7 @@ class AgentService:
         temperature: float = 0.2,
         max_text_units: int = ContextBuilder.MAX_TEXT_UNITS,
         max_messages: int = ContextBuilder.MAX_MESSAGES,
+        max_model_rounds: int = ContextBuilder.MAX_MODEL_ROUNDS,
         depth: int = 0,
         active_time: Optional[float] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -254,6 +255,7 @@ class AgentService:
             tools=send_tools,
             max_text_units=max_text_units,
             max_messages=max_messages,
+            max_model_rounds=max_model_rounds,
         )
 
         logger.info(f"[Agent] Start thinking, depth: {depth}, session_id: {session_id}, active_time: {active_time}")

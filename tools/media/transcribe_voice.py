@@ -22,16 +22,16 @@ class TranscribeVoiceTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Transcribe voice/audio files from host file paths or remote URLs, converting speech to text, up to 5 items per round.",
+                "description": "Transcribe audio/video files from host file paths or remote URLs, converting speech to text, up to 5 items per round.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "input": {
                             "type": "array",
-                            "description": "List of host voice file paths or remote voice URLs, up to 5 items.",
+                            "description": "List of host audio/video file paths or remote audio/video URLs, up to 5 items.",
                             "items": {
                                 "type": "string",
-                                "description": "Local voice file path or remote voice URL"
+                                "description": "Local audio/video file path or remote audio/video URL"
                             }
                         },
                     },
@@ -66,14 +66,14 @@ class TranscribeVoiceTool(Tool):
                 success_count += 1
             except Exception as e:
                 error_msg = str(e)
-                content += f"❌ [{idx}/{len(input_list)}] Failed to load voice content from: {input_item}\nError: {error_msg}\n\n"
+                content += f"❌ [{idx}/{len(input_list)}] Failed to load audio/video content from: {input_item}\nError: {error_msg}\n\n"
                 fail_count += 1
         
         total_length = sum(len(t) for t in all_texts)
         if fail_count == 0:
-            summary = f"✅ Converted {success_count} voice files to text (total length: {total_length} chars)"
+            summary = f"✅ Converted {success_count} audio/video files to text (total length: {total_length} chars)"
         elif success_count == 0:
-            summary = f"❌ All {fail_count} voice files failed to process"
+            summary = f"❌ All {fail_count} audio/video files failed to process"
         else:
             summary = f"⚠️ Processed {success_count} successful, {fail_count} failed (total text length: {total_length} chars)"
         

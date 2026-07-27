@@ -4,6 +4,10 @@ Designed for Witron to reside in external agent environments (e.g. Cline).
 No tool calling, no loop, no planning - pure thin proxy + memory + async save.
 """
 import asyncio
+import copy
+from datetime import datetime
+import json
+import time
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from common.log import logger
@@ -11,6 +15,8 @@ from config import conf
 from memory.impression_manager import ImpressionManager, slice_new_turn_messages
 from memory.context_builder import ContextBuilder
 from providers.llm.client import LlmClient
+from tools.manager import ToolManager
+from tools.memory import RecallImpressionsTool
 
 
 class PresenceService:
@@ -25,6 +31,7 @@ class PresenceService:
     def __init__(self):
         self.impression_manager = ImpressionManager.get_instance()
         self.context_builder = ContextBuilder.get_instance()
+        self.tool_manager = ToolManager.get_instance()
 
         self.memory_queue = asyncio.Queue(maxsize=100)
         self.is_processing_memory_queue = False
@@ -43,8 +50,8 @@ class PresenceService:
         """
         model = model if model and model != "default" else conf().get("chat_model")
 
-        # Prepare memory
-        memory = await self.impression_manager.build_memory_context()
+        # Prepare memory via LLM-judged recall
+        memory = await self._recall_memory(slice_new_turn_messages(messages))
 
         # Extract instructions
         instructions = f"Current user: {username}" if username else ""
@@ -60,11 +67,11 @@ class PresenceService:
         )
 
         # Prepare context for LLM
-        messages = [system_message] + messages
+        send_messages = [system_message] + messages
 
         request = dict(
             **kwargs,
-            messages=messages,
+            messages=send_messages,
             model=model,
             stream=stream,
         )
@@ -112,6 +119,78 @@ class PresenceService:
                     ),
                 )
             return result
+
+    async def _recall_memory(
+        self,
+        messages: List[Dict[str, Any]],
+        model: str = None,
+    ) -> str:
+        """
+        Lightweight LLM-judged memory recall: classify current conversation topic
+        against available categories/labels, then either do targeted recall or
+        fall back to recent mixed impressions.
+        """
+        model = model if model and model != "default" else conf().get("memory_model")
+
+        impression_categories = await self.impression_manager.get_recent_categories()
+        impression_labels = await self.impression_manager.get_mixed_labels()
+
+        # Get recall tool definition from global tool manager
+        tools = await self.tool_manager.get_definitions(filter=[RecallImpressionsTool.name])
+
+        send_messages = messages + [{
+            "role": "user",
+            "content":
+                "Memory impression categories:\n"
+                "------\n"
+                f"{', '.join([name for name, _ in impression_categories] or [])}\n"
+                "------\n\n"
+                "Memory impression labels:\n"
+                "------\n"
+                f"{', '.join([name for name, _ in impression_labels] or [])}\n"
+                "------\n\n"
+                "Note:\n"
+                f"- Call {RecallImpressionsTool.name} once if needed.\n"
+                "- If there's no need to recall anything, just reply \"RECENT\" to get recent mixed impressions."
+        }]
+
+        request = {
+            "messages": send_messages,
+            "model": model,
+            "thinking": False,
+            "stream": False,
+            "temperature": 0.2,
+            "tools": tools,
+            "tool_choice": "auto"
+        }
+        recall_start = time.time()
+        response = await LlmClient.factory(request["model"]).chat(**request)
+        recall_latency = round(time.time() - recall_start, 2)
+
+        recall_message = response["choices"][0]["message"]
+        recall_tool_call = recall_message["tool_calls"][0] if recall_message.get("tool_calls") else None
+
+        logger.info(f"[Presence] Recall judge ({recall_latency}s): {json.dumps(recall_tool_call, ensure_ascii=False)}")
+
+        if recall_tool_call:
+            recall_result = await self.tool_manager.execute(recall_tool_call)
+            pinned_impressions = await self.impression_manager.get_impressions_by_clues(
+                await self.impression_manager.get_pinned_clues(),
+                self.impression_manager.IMPRESSION_TEXT_UNITS_PER_SET // 5,
+            )
+            memory = (
+                "Recent pinned memory impressions (format [ModTime][Clue]Content):\n"
+                + "\n".join([
+                    f"[{datetime.fromtimestamp(score // 1_000).strftime('%Y-%m-%d %H:%M:%S')}][{clue}]{content}"
+                    for (clue, content), score in pinned_impressions
+                ] or [])
+                + f"\n\n"
+                + recall_result['content']
+            )
+        else:
+            memory = await self.impression_manager.build_memory_context()
+
+        return memory
 
     async def _put_memory_queue(self, **task_params):
         """Add memory task to queue (same pattern as agent.py)"""
