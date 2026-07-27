@@ -28,7 +28,7 @@ class ShortLinkClient:
         self.redis_client = RedisClient.get_instance()
 
     async def get_token_by_link(self, link):
-        if not link or not link.startswith("http"):
+        if not link:
             return ""
         token = ""
         try:
@@ -70,7 +70,7 @@ class ShortLinkClient:
 
     async def delete_by_link(self, link):
         """Delete short link mapping by link"""
-        if not link or not link.startswith("http"):
+        if not link:
             return
         try:
             md5 = hashlib.md5(link.encode()).hexdigest()

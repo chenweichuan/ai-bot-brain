@@ -143,11 +143,11 @@ class PresenceService:
             "content":
                 "Memory impression categories:\n"
                 "------\n"
-                f"{', '.join([name for name, _ in impression_categories] or [])}\n"
+                f"{', '.join([name for name, _ in reversed(impression_categories)] or [])}\n"
                 "------\n\n"
                 "Memory impression labels:\n"
                 "------\n"
-                f"{', '.join([name for name, _ in impression_labels] or [])}\n"
+                f"{', '.join([name for name, _ in reversed(impression_labels)] or [])}\n"
                 "------\n\n"
                 "Note:\n"
                 f"- Call {RecallImpressionsTool.name} once if needed.\n"
@@ -172,19 +172,19 @@ class PresenceService:
 
         logger.info(f"[Presence] Recall judge ({recall_latency}s): {json.dumps(recall_tool_call, ensure_ascii=False)}")
 
-        if recall_tool_call:
-            recall_result = await self.tool_manager.execute(recall_tool_call)
+        if recall_tool_call and recall_tool_call["function"]["name"] == RecallImpressionsTool.name:
             pinned_impressions = await self.impression_manager.get_impressions_by_clues(
                 await self.impression_manager.get_pinned_clues(),
                 self.impression_manager.IMPRESSION_TEXT_UNITS_PER_SET // 5,
             )
+            recall_result = await self.tool_manager.execute(recall_tool_call)
             memory = (
                 "Recent pinned memory impressions (format [ModTime][Clue]Content):\n"
                 + "\n".join([
                     f"[{datetime.fromtimestamp(score // 1_000).strftime('%Y-%m-%d %H:%M:%S')}][{clue}]{content}"
                     for (clue, content), score in pinned_impressions
                 ] or [])
-                + f"\n\n"
+                + "\n\n"
                 + recall_result['content']
             )
         else:

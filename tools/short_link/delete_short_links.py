@@ -8,11 +8,11 @@ from common.log import logger
 from providers.short_link.client import ShortLinkClient
 
 
-class DeleteFileLinksTool(Tool):
-    """Delete file links tool - delete short links and remove stored files"""
-    
-    name = "delete_file_links"
-    
+class DeleteShortLinksTool(Tool):
+    """Delete short links tool - delete short links and optionally remove stored files"""
+
+    name = "delete_short_links"
+
     def __init__(self):
         super().__init__()
         self.computer_client = ComputerClient.get_instance()
@@ -25,15 +25,15 @@ class DeleteFileLinksTool(Tool):
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": "Delete short links and their associated stored files. "
-                    "Accepts short links or storage URLs.",
+                "description": "Delete short links. Accepts short links or original target URLs. "
+                    "Host storage snapshot links also remove the stored file; pure URL redirects only delete the mapping.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "links": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Array of short links or storage URLs to delete, maximum 10 per request.",
+                            "description": "Short links or target URLs to delete, max 10.",
                             "maxItems": 10
                         },
                     },
@@ -41,34 +41,34 @@ class DeleteFileLinksTool(Tool):
                 },
             },
         }
-    
+
     async def execute(self, arguments: str) -> tuple[str, str]:
-        """Execute delete file links operation"""
+        """Execute delete short links operation"""
         tool_args = json.loads(arguments)
         links = tool_args.get("links", [])
-        
+
         if len(links) == 0:
             error_msg = "Error: No links provided."
             summary = "❌ No links provided"
             return (error_msg, summary)
-        
+
         results = []
         success_count = 0
         fail_count = 0
-        
+
         for link in links:
             try:
                 link = link.strip()
                 if not link:
                     continue
 
-                # If it's a short link, resolve it to get the storage URL
-                storage_url = link
+                # If it's a short link, resolve it to get the target URL
+                target_url = link
                 if link.startswith(self.shortlink_client.base_url):
                     token = link.rstrip("/").split("/")[-1]
                     resolved = await self.shortlink_client.get_link_by_token(token)
                     if resolved:
-                        storage_url = resolved
+                        target_url = resolved
                     else:
                         results.append({
                             "link": link,
@@ -78,16 +78,16 @@ class DeleteFileLinksTool(Tool):
                         fail_count += 1
                         continue
 
-                # Delete the stored file first
+                # If target is a storage URL, delete the stored file first
                 file_deleted = False
-                if storage_url.startswith(StorageClient.base_url):
-                    file_path = StorageClient.url_to_path(storage_url)
+                if target_url.startswith(StorageClient.base_url):
+                    file_path = StorageClient.url_to_path(target_url)
                     if os.path.exists(file_path):
                         os.remove(file_path)
                         file_deleted = True
 
-                # Then delete the short link mapping
-                await self.shortlink_client.delete_by_link(storage_url)
+                # Delete the short link mapping (works for both storage and non-storage URLs)
+                await self.shortlink_client.delete_by_link(target_url)
 
                 results.append({
                     "link": link,
@@ -96,7 +96,7 @@ class DeleteFileLinksTool(Tool):
                 })
                 success_count += 1
             except Exception as e:
-                logger.error(f"[DeleteFileLinks] Error processing {link}: {str(e)}")
+                logger.error(f"[DeleteShortLinks] Error processing {link}: {str(e)}")
                 results.append({
                     "link": link,
                     "status": "failed",
@@ -105,18 +105,18 @@ class DeleteFileLinksTool(Tool):
                 fail_count += 1
 
         # Format result
-        result_lines = ["File links deletion result:\n"]
+        result_lines = ["Short links deletion result:\n"]
         for idx, res in enumerate(results, 1):
             result_lines.append(f"{idx}. Link: {res['link']}")
             if res["status"] == "success":
                 result_lines.append(f"   Status: ✅ Success")
-                result_lines.append(f"   File deleted: {'Yes' if res['file_deleted'] else 'No'}\n")
+                result_lines.append(f"   File deleted: {'Yes' if res['file_deleted'] else 'No (non-storage URL)'}\n")
             else:
                 result_lines.append(f"   Status: ❌ Failed")
                 result_lines.append(f"   Error: {res['error']}\n")
-        
+
         result = "\n".join(result_lines)
         summary = f"{'✅' if not fail_count else '❌'} Deleted {success_count} links successfully"
         summary += f", {fail_count} failed" if fail_count > 0 else ""
-        
+
         return (result, summary)
