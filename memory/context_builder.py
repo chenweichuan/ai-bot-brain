@@ -20,7 +20,7 @@ class ContextBuilder:
 
     @classmethod
     def get_instance(cls):
-        """获取单例实例"""
+        """Get singleton instance"""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -39,7 +39,7 @@ class ContextBuilder:
         max_messages: int = MAX_MESSAGES,
         max_model_rounds: int = MAX_MODEL_ROUNDS,
     ) -> List[Dict[str, Any]]:
-        """Prepare messages for LLM request"""
+        """Prepare context for LLM request"""
         history = copy.deepcopy(history or [])
         actions = actions or []
         tools = tools or []
@@ -48,8 +48,6 @@ class ContextBuilder:
         
         # Build system message
         system_message = self.build_system_message(
-            memory=memory,
-            instructions=instructions,
             actions=actions,
             tools=tools,
         )
@@ -75,7 +73,7 @@ class ContextBuilder:
         # Find the last assistant message
         last_assistant_idx = len(messages) - 1 - next((i for i, msg in enumerate(reversed(messages)) if msg["role"] == "assistant"), 0)
 
-        # 如果最新消息是AI回复的，则提取出该新消息触发的工具里给出的多媒体资源
+        # If the latest message is from the assistant, extract multimodal resources from tool results triggered by that reply
         if last_assistant_idx > last_user_idx:
             for msg in messages[last_assistant_idx:]:
                 if msg["role"] == "tool" and isinstance(msg["content"], list):
@@ -83,20 +81,35 @@ class ContextBuilder:
                         if part.get("type") in ["image", "video"]:
                             multimodal_parts.append(part)
 
-        # 消息内容格式调整
+        # Message content formatting
         valid_msg_fields = ["role", "reasoning_content", "content", "tool_call_id", "tool_calls"]
         for index, msg in enumerate(messages):
-            # 将消息内容结构统一转为纯文本，降低非文本资源导致的性能消耗
+            # Normalize message content to plain text to reduce performance overhead from non-text resources
             msg["content"] = stringify_message_content(msg["content"])
-            # 消息发送人处理
+            # Handle message sender info
             if msg["role"] == "user" and msg.get("name"):
                 msg["content"] = f"User (named {msg['name']}) " \
                     f"at {datetime.fromtimestamp(msg['timestamp'] // 1_000).strftime('%Y-%m-%d %H:%M:%S')} " \
                     f"says:\n\n{msg['content']}"
-            # 只保留有效字段
+            # Keep only valid fields
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
-        # 追加最新AI消息工具调用里返回的多媒体资源
+        # Inject current time and memory at the start of the last non-tool message
+        last_non_tool_idx = len(messages) - 1 - next(
+            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
+            len(messages) - 1
+        )
+        messages[last_non_tool_idx]["content"] = "\n\n".join(filter(lambda s: s, [
+            memory or "",
+            f"------ [Instructions] ------" if instructions else "",
+            instructions if instructions else "",
+            "------",
+            f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "------",
+            messages[last_non_tool_idx]["content"],
+        ]))
+
+        # Append multimodal resources returned from the latest assistant message's tool calls
         if multimodal_parts:
             multimodal_msg = {
                 "role": "user",
@@ -114,8 +127,6 @@ class ContextBuilder:
 
     def build_system_message(
         self,
-        memory: str = "",
-        instructions: str = "",
         actions: List[Dict[str, str]] = None,
         tools: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
@@ -132,15 +143,11 @@ class ContextBuilder:
             + f"{owner_name} is your owner, and you only trust your owner and those who have been confirmed trustworthy by your owner.\n" \
             + "- When you chat and interact with different users, you MUST 100% protect and respect the personal information of other users stored in your memory.\n" \
             + "- Your inner thinking mode is running asynchronously in the background all the time to handle anything that needs follow-up or completion.\n" \
-            + "- Think fast for simple questions; only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis.\n" \
-            + f"- Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            + "- Think fast for simple questions; only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis."
 
         # Role Prompt
         prompts.append(role_prompt)
 
-        if memory:
-            prompts.append(memory)
- 
         prompts.append(
             "Special Markdown syntax:\n"
             "------\n"
@@ -178,10 +185,6 @@ class ContextBuilder:
         # Role Prompt again
         prompts.append(role_prompt)
 
-        if instructions:
-            prompts.append("------ [Instructions] ------")
-            prompts.append(instructions)
- 
         return {
             "role": "system",
             "content": "\n\n".join(prompts),

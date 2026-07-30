@@ -70,5 +70,5 @@
   "volc_search_api_key": "your_volc_search_api_key",
   "proxy_pool_url": "http://127.0.0.1:5010/get/",
   "chromium_path": "/usr/bin/chromium-browser",
-  "auto_scheduler_interval": 1800
+  "auto_scheduler_interval": 3600
 }

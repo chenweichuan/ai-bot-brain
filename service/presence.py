@@ -50,21 +50,12 @@ class PresenceService:
         # Prepare memory via LLM-judged recall
         memory = await self._recall_memory(slice_new_turn_messages(messages))
 
-        # Extract instructions
-        instructions = f"Current user: {username}" if username else ""
-        if messages[0].get("role") in ("system", "developer"):
-            instructions += "\n\n" if instructions else ""
-            instructions += messages[0]["content"]
-            del messages[0]
-
-        # Build system message
-        system_message = self.context_builder.build_system_message(
-            memory=memory,
-            instructions=instructions,
-        )
-
         # Prepare context for LLM
-        send_messages = [system_message] + messages
+        send_messages = self._build_context(
+            messages=messages,
+            memory=memory,
+            username=username,
+        )
 
         request = dict(
             **kwargs,
@@ -93,7 +84,6 @@ class PresenceService:
                                     "content": reply_content
                                 }]
                             ),
-                            instructions=instructions,
                             username=username,
                         )
             return _stream_gen()
@@ -112,7 +102,6 @@ class PresenceService:
                             "content": reply_content
                         }]
                     ),
-                    instructions=instructions,
                     username=username,
                 )
             return result
@@ -249,3 +238,42 @@ class PresenceService:
 
         return memory
 
+    def _build_context(
+        self,
+        messages: List[Dict[str, Any]],
+        memory: str = "",
+        username: str = None,
+    ) -> List[Dict[str, Any]]:
+        """Prepare context for LLM request"""
+        messages = copy.deepcopy(messages)
+
+        # Build system message
+        system_message = self.context_builder.build_system_message()
+
+        # Combine system message and messages
+        if messages[0].get("role") in ("system", "developer"):
+            messages[0]["content"] = f"{system_message['content']}\n\n{messages[0]['content']}"
+        else:
+            messages.insert(0, system_message)
+
+        # Inject per-turn dynamic context at the start of the last non-tool message
+        last_non_tool_idx = len(messages) - 1 - next(
+            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
+            len(messages) - 1
+        )
+        if last_non_tool_idx >= 0:
+            prepended_content = "\n\n".join(filter(lambda s: s, [
+                memory,
+                "------",
+                f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "------",
+                f"Current user: {username}" if username else "",
+                "------",
+            ]))
+            original_content = messages[last_non_tool_idx]["content"]
+            if isinstance(original_content, list):
+                original_content.insert(0, {"type": "text", "text": prepended_content})
+            else:
+                messages[last_non_tool_idx]["content"] = f"{prepended_content}\n\n{original_content}"
+
+        return messages
