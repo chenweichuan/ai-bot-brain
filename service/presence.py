@@ -46,12 +46,19 @@ class PresenceService:
         Returns async generator of OpenAI SSE chunks (stream) or single dict (non-stream).
         """
         model = model if model and model != "default" else conf().get("chat_model")
-
+        
         # Prepare memory via LLM-judged recall
         memory = await self._recall_memory(slice_new_turn_messages(messages))
 
+        # Extract instructions
+        instructions = ""
+        if messages[0].get("role") in ("system", "developer"):
+            instructions = messages[0]["content"]
+            del messages[0]
+
         # Prepare context for LLM
         send_messages = self._build_context(
+            instructions=instructions,
             messages=messages,
             memory=memory,
             username=username,
@@ -84,6 +91,7 @@ class PresenceService:
                                     "content": reply_content
                                 }]
                             ),
+                            instructions=instructions,
                             username=username,
                         )
             return _stream_gen()
@@ -102,6 +110,7 @@ class PresenceService:
                             "content": reply_content
                         }]
                     ),
+                    instructions=instructions,
                     username=username,
                 )
             return result
@@ -240,30 +249,29 @@ class PresenceService:
 
     def _build_context(
         self,
+        instructions: str,
         messages: List[Dict[str, Any]],
-        memory: str = "",
-        username: str = None,
+        memory: str,
+        username: str,
     ) -> List[Dict[str, Any]]:
         """Prepare context for LLM request"""
         messages = copy.deepcopy(messages)
 
         # Build system message
-        system_message = self.context_builder.build_system_message()
+        system_message = self.context_builder.build_system_message(
+            instructions=instructions
+        )
 
         # Combine system message and messages
-        if messages[0].get("role") in ("system", "developer"):
-            messages[0]["content"] = f"{system_message['content']}\n\n{messages[0]['content']}"
-        else:
-            messages.insert(0, system_message)
+        messages.insert(0, system_message)
 
-        # Inject per-turn dynamic context at the start of the last non-tool message
+        # Inject dynamic context at the start of the last non-tool message
         last_non_tool_idx = len(messages) - 1 - next(
             (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
             len(messages) - 1
         )
         if last_non_tool_idx >= 0:
             prepended_content = "\n\n".join(filter(lambda s: s, [
-                self.context_builder.build_role_prompt(),
                 memory,
                 "------",
                 f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",

@@ -93,6 +93,8 @@ class DoubaoaiLlmAdapter(LlmClient):
                                         chunk = json.loads(data)
                                         if chunk.get("model"):
                                             chunk["model"] = request["model"]
+                                        if chunk.get("usage"):
+                                            logger.info(f"[DoubaoAI] Token usage: {json.dumps(chunk['usage'], ensure_ascii=False)}")
                                         yield chunk
                                     except json.JSONDecodeError:
                                         continue
@@ -114,6 +116,9 @@ class DoubaoaiLlmAdapter(LlmClient):
 
                     result = response.json()
                     result["model"] = request["model"]
+
+                    if result.get("usage"):
+                        logger.info(f"[DoubaoAI] Token usage: {json.dumps(result['usage'], ensure_ascii=False)}")
 
                     logger.info(f"[DoubaoAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 

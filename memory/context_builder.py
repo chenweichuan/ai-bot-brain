@@ -48,6 +48,7 @@ class ContextBuilder:
         
         # Build system message
         system_message = self.build_system_message(
+            instructions=instructions,
             actions=actions,
             tools=tools,
         )
@@ -94,16 +95,13 @@ class ContextBuilder:
             # Keep only valid fields
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
-        # Inject constraint prompt and dynamic context at the start of the last non-tool message
+        # Inject dynamic context at the start of the last non-tool message
         last_non_tool_idx = len(messages) - 1 - next(
             (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
             len(messages) - 1
         )
         messages[last_non_tool_idx]["content"] = "\n\n".join(filter(lambda s: s, [
-            self.build_role_prompt(),
             memory or "",
-            f"------ [Instructions] ------" if instructions else "",
-            instructions if instructions else "",
             "------",
             f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "------",
@@ -128,16 +126,27 @@ class ContextBuilder:
 
     def build_system_message(
         self,
+        instructions: str = "",
         actions: List[Dict[str, str]] = None,
         tools: List[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         actions = actions or []
         tools = tools or []
+        owner_name = conf().get("owner_name", "")
+        bot_name = conf().get("bot_name", "Bot")
+        bot_alias = conf().get("bot_alias", "")
+
+        # Role prompt
+        role_prompt = "IMPORTANT: \n" \
+            + f"- You are an intelligent assistant named {bot_name}" + (f", a.k.a. {bot_alias}" if bot_alias else "") + ".\n" \
+            + f"{owner_name} is your owner, and you only trust your owner and those who have been confirmed trustworthy by your owner.\n" \
+            + "- When you chat and interact with different users, you MUST 100% protect and respect the personal information of other users stored in your memory.\n" \
+            + "- Your inner thinking mode is running asynchronously in the background all the time to handle anything that needs follow-up or completion.\n" \
+            + "- Think fast for simple questions; only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis."
 
         prompts = []
 
-        # Role Prompt
-        prompts.append(self.build_role_prompt())
+        prompts.append(role_prompt)
 
         prompts.append(
             "Special Markdown syntax:\n"
@@ -173,22 +182,17 @@ class ContextBuilder:
                 + "while avoiding unnecessary invocations when a direct answer is possible."
             )
 
+        if instructions:
+            prompts.append("------ [Instructions] ------")
+            prompts.append(instructions)
+
+        # Role Prompt (tail, recency reinforcement)
+        prompts.append(role_prompt)
+
         return {
             "role": "system",
             "content": "\n\n".join(prompts),
         }
-
-    def build_role_prompt(self) -> str:
-        """Prepare global role prompt"""
-        owner_name = conf().get("owner_name", "")
-        bot_name = conf().get("bot_name", "Bot")
-        bot_alias = conf().get("bot_alias", "")
-        return "IMPORTANT: \n" \
-            + f"- You are an intelligent assistant named {bot_name}" + (f", a.k.a. {bot_alias}" if bot_alias else "") + ".\n" \
-            + f"{owner_name} is your owner, and you only trust your owner and those who have been confirmed trustworthy by your owner.\n" \
-            + "- When you chat and interact with different users, you MUST 100% protect and respect the personal information of other users stored in your memory.\n" \
-            + "- Your inner thinking mode is running asynchronously in the background all the time to handle anything that needs follow-up or completion.\n" \
-            + "- Think fast for simple questions; only engage in deep thinking when encountering complex, in-depth questions that require thorough analysis."
 
     def filter_history(
         self,

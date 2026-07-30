@@ -97,7 +97,10 @@ class OpenaiLlmAdapter(LlmClient):
                                     if data == "[DONE]":
                                         break
                                     try:
-                                        yield json.loads(data)
+                                        chunk = json.loads(data)
+                                        if chunk.get("usage"):
+                                            logger.info(f"[OpenAI] Token usage: {json.dumps(chunk['usage'], ensure_ascii=False)}")
+                                        yield chunk
                                     except json.JSONDecodeError:
                                         continue
                     except Exception as e:
@@ -117,6 +120,9 @@ class OpenaiLlmAdapter(LlmClient):
                     response.raise_for_status()
 
                     result = response.json()
+
+                    if result.get("usage"):
+                        logger.info(f"[OpenAI] Token usage: {json.dumps(result['usage'], ensure_ascii=False)}")
 
                     logger.info(f"[OpenAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 
