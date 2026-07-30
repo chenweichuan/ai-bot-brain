@@ -37,9 +37,6 @@ class AgentService:
         self.tool_manager = ToolManager.get_instance()
         self.redis_client = RedisClient.get_instance()
 
-        self.memory_queue = asyncio.Queue(maxsize=100)
-        self.is_processing_memory_queue = False
-        
         self.bot_name = conf().get("bot_name", "Bot")
         self.KEY_PREFIX = f"{self.bot_name.lower().replace(' ', '_')}:agent"
         
@@ -374,12 +371,12 @@ class AgentService:
         finally:
             bot_message["streaming"] = False
             await self.session_manager.save_message(session_id, bot_message)
-            # If bot_message has content or tool_calls, add memory task to queue
+            # If bot_message has content or tool_calls, enqueue memory maintenance
             if bot_message.get("content") or bot_message.get("tool_calls"):
-                await self._put_memory_queue(
-                    username=username,
+                await self.impression_manager.enqueue_maintain(
+                    messages=slice_new_turn_messages(history),
                     instructions=instructions,
-                    history=slice_new_turn_messages(history)
+                    username=username,
                 )
 
         # Check if we should continue thinking
@@ -454,54 +451,6 @@ class AgentService:
             new_msg_ids.append(msg["id"])
     
         return new_msg_ids
-
-    async def _put_memory_queue(self, **task_params):
-        """Add memory task to queue"""
-        try:
-            if self.memory_queue.full():
-                # Remove the oldest item to make space
-                self.memory_queue.get_nowait()
-                logger.warning(f"[Agent] Memory queue is full. Evicting oldest task to make space.")
-            # Try to add to queue
-            self.memory_queue.put_nowait(task_params)
-            logger.info(f"[Agent] Added memory task to queue. Queue size: {self.memory_queue.qsize()}")
-            # Start processing queue if not already processing
-            if not self.is_processing_memory_queue:
-                asyncio.create_task(self._process_memory_queue())
-        except Exception as e:
-            logger.error(f"[Agent] Processing impression queue error: {e}")
-
-    async def _process_memory_queue(self):
-        """Process memory tasks from queue sequentially"""
-        if self.is_processing_memory_queue:
-            return
-        
-        self.is_processing_memory_queue = True
-        logger.info(f"[Agent] Started processing memory queue")
-        
-        try:
-            while not self.memory_queue.empty():
-                # Get task from queue
-                task_params = await self.memory_queue.get()
-                try:
-                    # Maintain impressions
-                    await self.impression_manager.maintain_impressions_by_llm(
-                        username=task_params["username"],
-                        instructions=task_params["instructions"],
-                        messages=task_params["history"],
-                    )
-                    logger.info(f"[Agent] Completed memory task, remaining in queue: {self.memory_queue.qsize()}")
-                except Exception as e:
-                    logger.error(f"[Agent] Failed to process memory task: {e}")
-                    logger.exception(e)
-                finally:
-                    # Mark task as done
-                    self.memory_queue.task_done()
-                    # Add small delay to avoid overwhelming the system
-                    await asyncio.sleep(0.01)
-        finally:
-            self.is_processing_memory_queue = False
-            logger.info(f"[Agent] Finished processing memory queue")
 
     async def _detect_action_call(
         self,

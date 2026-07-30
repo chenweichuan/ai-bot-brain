@@ -2,6 +2,8 @@
 - High-density symbol system, time-based rolling
 - Fully loaded into system context during each conversation
 """
+import asyncio
+import copy
 import json
 import time
 from typing import List, Dict, Any, Optional
@@ -65,14 +67,18 @@ class ImpressionManager(ImpressMemManager):
         
         self.context_builder = ContextBuilder.get_instance()
 
+        # Async memory maintenance queue
+        self._maintain_queue = asyncio.Queue(maxsize=100)
+        self._is_processing_maintain_queue = False
+
     # ==================== Maintain Impressions By LLM ====================
 
     async def maintain_impressions_by_llm(
         self,
         messages: List[Dict[str, Any]],
-        username: str = None,
         instructions: str = "",
         model: str = None,
+        username: str = None,
     ) -> None:
         """
         Save impression entries based on the messages
@@ -84,8 +90,13 @@ class ImpressionManager(ImpressMemManager):
             username: Username of the user
         """
         # Make LLM request to save or organize impressions using impressmem's tools directly
+        messages = copy.deepcopy(messages or [])
         model = model if model and model != "default" else conf().get("memory_model")
         memory_context = await self.build_memory_context()
+
+        # Remove reasoning
+        for msg in messages:
+            msg["reasoning_content"] = None
 
         # Get tool definitions directly from impressmem tools
         send_tools = self.get_maintain_tool_definitions()
@@ -111,7 +122,7 @@ class ImpressionManager(ImpressMemManager):
         request = {
             "messages": send_messages,
             "model": model,
-            "thinking": False,
+            "thinking": True,
             "stream": False,
             "temperature": 0.1,
             "tools": send_tools,
@@ -129,3 +140,65 @@ class ImpressionManager(ImpressMemManager):
         
         # Execute each tool call
         await self.execute_maintain_tool_calls(maintenance_tool_calls)
+
+    async def enqueue_maintain(
+        self,
+        messages: List[Dict[str, Any]],
+        instructions: str = "",
+        username: str = None,
+    ) -> None:
+        """
+        Enqueue a memory maintenance task to be processed asynchronously.
+        Non-blocking: returns immediately after putting task into queue.
+
+        Args:
+            messages: Conversation messages to maintain from
+            username: Username of the user
+            instructions: Instructions for the LLM
+        """
+        try:
+            if self._maintain_queue.full():
+                # Remove the oldest item to make space
+                self._maintain_queue.get_nowait()
+                logger.warning("[ImpressionManager] Memory queue is full. Evicting oldest task to make space.")
+            self._maintain_queue.put_nowait({
+                "messages": messages,
+                "instructions": instructions,
+                "username": username,
+            })
+            logger.info(f"[ImpressionManager] Added memory task to queue. Queue size: {self._maintain_queue.qsize()}")
+            # Start processing queue if not already processing
+            if not self._is_processing_maintain_queue:
+                asyncio.create_task(self._process_maintain_queue())
+        except Exception as e:
+            logger.error(f"[ImpressionManager] Enqueue memory task error: {e}")
+
+    async def _process_maintain_queue(self) -> None:
+        """Process memory maintenance tasks from queue sequentially"""
+        if self._is_processing_maintain_queue:
+            return
+        self._is_processing_maintain_queue = True
+
+        try:
+            logger.info("[ImpressionManager] Started processing memory queue")
+
+            while not self._maintain_queue.empty():
+                task = await self._maintain_queue.get()
+                try:
+                    await self.maintain_impressions_by_llm(
+                        messages=task["messages"],
+                        instructions=task.get("instructions", ""),
+                        username=task.get("username"),
+                    )
+                    logger.info(f"[ImpressionManager] Completed memory task, remaining in queue: {self._maintain_queue.qsize()}")
+                except Exception as e:
+                    logger.error(f"[ImpressionManager] Failed to process memory task: {e}")
+                    logger.exception(e)
+                finally:
+                    # Mark task as done
+                    self._maintain_queue.task_done()
+                    # Add small delay to avoid overwhelming the system
+                    await asyncio.sleep(0.01)
+        finally:
+            self._is_processing_maintain_queue = False
+            logger.info("[ImpressionManager] Finished processing memory queue")

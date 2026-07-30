@@ -3,7 +3,6 @@ Presence Service - OpenAI-compatible single-round chat with memory injection.
 Designed for Witron to reside in external agent environments (e.g. Cline).
 No tool calling, no loop, no planning - pure thin proxy + memory + async save.
 """
-import asyncio
 import copy
 from datetime import datetime
 import json
@@ -32,9 +31,6 @@ class PresenceService:
         self.impression_manager = ImpressionManager.get_instance()
         self.context_builder = ContextBuilder.get_instance()
         self.tool_manager = ToolManager.get_instance()
-
-        self.memory_queue = asyncio.Queue(maxsize=100)
-        self.is_processing_memory_queue = False
 
     async def chat(
         self,
@@ -89,15 +85,15 @@ class PresenceService:
                 finally:
                     # Async memory save after response completes
                     if reply_content:
-                        await self._put_memory_queue(
-                            username=username,
-                            instructions=instructions,
-                            history=slice_new_turn_messages(
+                        await self.impression_manager.enqueue_maintain(
+                            messages=slice_new_turn_messages(
                                 messages + [{
                                     "role": "assistant",
                                     "content": reply_content
                                 }]
                             ),
+                            instructions=instructions,
+                            username=username,
                         )
             return _stream_gen()
         else:
@@ -108,15 +104,15 @@ class PresenceService:
                 reply_content = message.get("content")
             # Async memory save after response completes
             if reply_content:
-                await self._put_memory_queue(
-                    username=username,
-                    instructions=instructions,
-                    history=slice_new_turn_messages(
+                await self.impression_manager.enqueue_maintain(
+                    messages=slice_new_turn_messages(
                         messages + [{
                             "role": "assistant",
                             "content": reply_content
                         }]
                     ),
+                    instructions=instructions,
+                    username=username,
                 )
             return result
 
@@ -130,13 +126,18 @@ class PresenceService:
         against available categories/labels, then either do targeted recall or
         fall back to recent mixed impressions.
         """
+        messages = copy.deepcopy(messages or [])
         model = model if model and model != "default" else conf().get("memory_model")
 
         impression_categories = await self.impression_manager.get_recent_categories()
         impression_labels = await self.impression_manager.get_mixed_labels()
 
+        # Remove reasoning
+        for msg in messages:
+            msg["reasoning_content"] = None
+
         # Get recall tool definition from global tool manager
-        tools = await self.tool_manager.get_definitions(filter=[RecallImpressionsTool.name])
+        send_tools = await self.tool_manager.get_definitions(filter=[RecallImpressionsTool.name])
 
         send_messages = messages + [{
             "role": "user",
@@ -160,7 +161,7 @@ class PresenceService:
             "thinking": False,
             "stream": False,
             "temperature": 0.2,
-            "tools": tools,
+            "tools": send_tools,
             "tool_choice": "auto"
         }
         recall_start = time.time()
@@ -192,45 +193,3 @@ class PresenceService:
 
         return memory
 
-    async def _put_memory_queue(self, **task_params):
-        """Add memory task to queue (same pattern as agent.py)"""
-        try:
-            if self.memory_queue.full():
-                self.memory_queue.get_nowait()
-                logger.warning("[Presence] Memory queue full, evicting oldest task")
-            self.memory_queue.put_nowait(task_params)
-            logger.info(f"[Presence] Added memory task, queue size: {self.memory_queue.qsize()}")
-            if not self.is_processing_memory_queue:
-                asyncio.create_task(self._process_memory_queue())
-        except Exception as e:
-            logger.error(f"[Presence] Memory queue error: {e}")
-
-    async def _process_memory_queue(self):
-        """Process memory tasks sequentially (same pattern as agent.py)"""
-        if self.is_processing_memory_queue:
-            return
-        
-        self.is_processing_memory_queue = True
-        logger.info("[Presence] Started processing memory queue")
-        
-        try:
-            while not self.memory_queue.empty():
-                task_params = await self.memory_queue.get()
-                try:
-                    await self.impression_manager.maintain_impressions_by_llm(
-                        username=task_params.get("username"),
-                        instructions=task_params.get("instructions"),
-                        messages=task_params["history"],
-                    )
-                    logger.info(f"[Presence] Memory task done, remaining: {self.memory_queue.qsize()}")
-                except Exception as e:
-                    logger.error(f"[Presence] Memory task failed: {e}")
-                    logger.exception(e)
-                finally:
-                    # Mark task as done
-                    self.memory_queue.task_done()
-                    # Add small delay to avoid overwhelming the system
-                    await asyncio.sleep(0.01)
-        finally:
-            self.is_processing_memory_queue = False
-            logger.info("[Presence] Finished processing memory queue")
