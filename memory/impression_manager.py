@@ -92,7 +92,7 @@ class ImpressionManager(ImpressMemManager):
         # Make LLM request to save or organize impressions using impressmem's tools directly
         messages = copy.deepcopy(messages or [])
         model = model if model and model != "default" else conf().get("memory_model")
-        memory_context = await self.build_memory_context()
+        memory = await self.build_memory_context()
 
         # Remove reasoning
         for msg in messages:
@@ -104,7 +104,7 @@ class ImpressionManager(ImpressMemManager):
         # Build context
         send_messages = self.context_builder.build_context(
             history=messages,
-            memory=memory_context,
+            memory=memory,
             instructions=instructions,
             tools=send_tools,
         )

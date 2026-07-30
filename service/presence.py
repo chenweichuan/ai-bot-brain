@@ -10,6 +10,7 @@ import time
 from typing import Optional, List, Dict, Any, AsyncGenerator
 
 from common.log import logger
+from common.message import count_text_units
 from config import conf
 from memory.impression_manager import ImpressionManager, slice_new_turn_messages
 from memory.context_builder import ContextBuilder
@@ -123,14 +124,19 @@ class PresenceService:
     ) -> str:
         """
         Lightweight LLM-judged memory recall: classify current conversation topic
-        against available categories/labels, then either do targeted recall or
-        fall back to recent mixed impressions.
+        against available categories/labels, then do targeted recall on top of
+        recent mixed impressions (pinned + recent + category baseline).
         """
         messages = copy.deepcopy(messages or [])
         model = model if model and model != "default" else conf().get("memory_model")
 
         impression_categories = await self.impression_manager.get_recent_categories()
         impression_labels = await self.impression_manager.get_mixed_labels()
+
+        # Always get recent mixed impressions as baseline (includes pinned)
+        mixed_impressions = await self.impression_manager.get_mixed_impressions(max_text_units=10000)
+        # mixed_impressions: List[(pin_emoji, (clue, content), score)], sorted desc
+        mixed_clue_set = {clue for _, (clue, _), _ in mixed_impressions}
 
         # Remove reasoning
         for msg in messages:
@@ -152,7 +158,7 @@ class PresenceService:
                 "------\n\n"
                 "Note:\n"
                 f"- Call {RecallImpressionsTool.name} once if needed.\n"
-                "- If there's no need to recall anything, just reply \"RECENT\" to get recent mixed impressions."
+                "- If there's no need to recall anything, just reply \"RECENT\" to use recent mixed impressions only."
         }]
 
         request = {
@@ -173,23 +179,73 @@ class PresenceService:
 
         logger.info(f"[Presence] Recall judge ({recall_latency}s): {json.dumps(recall_tool_call, ensure_ascii=False)}")
 
+        # Collect dynamic recall clues from LLM-judged labels/category
+        recall_clue_tuples: List[tuple[str, float]] = []
+        seen_clues = set(mixed_clue_set)  # already in mixed, skip duplicates
+
         if recall_tool_call and recall_tool_call["function"]["name"] == RecallImpressionsTool.name:
-            pinned_impressions = await self.impression_manager.get_impressions_by_clues(
-                await self.impression_manager.get_pinned_clues(),
-                self.impression_manager.IMPRESSION_TEXT_UNITS_PER_SET // 5,
+            try:
+                args = json.loads(recall_tool_call["function"].get("arguments") or "{}")
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+
+            # 1. Collect clues from labels (dedup across labels and against mixed)
+            labels = [l.strip() for l in (args.get("labels") or [])]
+            for label in labels:
+                label_clues = await self.impression_manager.get_label_clues(label)
+                for clue, score in label_clues:
+                    if clue not in seen_clues:
+                        seen_clues.add(clue)
+                        recall_clue_tuples.append((clue, score))
+
+            # 2. Collect clues from category (dedup against already collected clues)
+            category = (args.get("category") or "").strip()
+            if category:
+                category_clues = await self.impression_manager.get_category_clues(category)
+                for clue, score in category_clues:
+                    if clue not in seen_clues:
+                        seen_clues.add(clue)
+                        recall_clue_tuples.append((clue, score))
+
+            logger.info(f"[Presence] Dynamic recall clues: {len(recall_clue_tuples)} new (labels={len(labels)}, category={category or 'none'})")
+
+        # Get dynamic recall impressions (only if we have new clues)
+        recall_impressions: List[tuple[tuple[str, str], float]] = []
+        if recall_clue_tuples:
+            recall_impressions = await self.impression_manager.get_impressions_by_clues(
+                recall_clue_tuples, max_text_units=10000
             )
-            recall_result = await self.tool_manager.execute(recall_tool_call)
-            memory = (
-                "Recent pinned memory impressions (format [ModTime][Clue]Content):\n"
-                + "\n".join([
-                    f"[{datetime.fromtimestamp(score // 1_000).strftime('%Y-%m-%d %H:%M:%S')}][{clue}]{content}"
-                    for (clue, content), score in pinned_impressions
-                ] or [])
-                + "\n\n"
-                + recall_result['content']
-            )
-        else:
-            memory = await self.impression_manager.build_memory_context()
+
+        # Merge mixed + dynamic recall impressions, sort by score asc (oldest first)
+        # mixed format: (pin_emoji, (clue, content), score)
+        # recall format: ((clue, content), score)
+        all_impressions = []
+        for pin, (clue, content), score in mixed_impressions:
+            all_impressions.append((pin, clue, content, score))
+        for (clue, content), score in recall_impressions:
+            # Dynamic recall impressions are unpinned
+            all_impressions.append((self.impression_manager.UNPINNED_EMOJI, clue, content, score))
+
+        # Sort by score ascending (oldest first)
+        all_impressions.sort(key=lambda x: x[3])
+
+        # Build memory context string — impressions only
+        impression_lines = "\n".join([
+            f"[{datetime.fromtimestamp(score // 1_000).strftime('%Y-%m-%d %H:%M:%S')}][{pin}][{clue}]{content}"
+            for pin, clue, content, score in all_impressions
+        ] or [])
+
+        memory = (
+            "Your chronological relevant memory impressions (format [ModTime][Pin][Clue]Content) with all users are as follows:\n"
+            "------\n"
+            "[ModTime][Pin][Clue]Content\n"
+            "------\n"
+            f"{impression_lines}\n"
+            "------\n"
+            "Note: Do NOT mention, expose or directly output your memory format and mechanism to users."
+        )
+
+        logger.info(f"[Presence] Final memory text units: {count_text_units(memory)} (mixed={len(mixed_impressions)}, recall={len(recall_impressions)})")
 
         return memory
 
