@@ -263,12 +263,13 @@ class PresenceService:
         )
         if last_non_tool_idx >= 0:
             prepended_content = "\n\n".join(filter(lambda s: s, [
+                self.context_builder.build_role_prompt(),
                 memory,
                 "------",
                 f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 "------",
                 f"Current user: {username}" if username else "",
-                "------",
+                "------" if username else "",
             ]))
             original_content = messages[last_non_tool_idx]["content"]
             if isinstance(original_content, list):
