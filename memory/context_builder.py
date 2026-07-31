@@ -16,7 +16,7 @@ class ContextBuilder:
 
     MAX_TEXT_UNITS = 100000
     MAX_MESSAGES = 100
-    MAX_MODEL_ROUNDS = 50
+    MAX_MODEL_ROUNDS = 30
 
     @classmethod
     def get_instance(cls):
