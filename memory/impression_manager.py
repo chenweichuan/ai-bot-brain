@@ -98,6 +98,13 @@ class ImpressionManager(ImpressMemManager):
         for msg in messages:
             msg["reasoning_content"] = None
 
+        # Append maintain instructions
+        messages.append({
+            "role": "user",
+            "content": f"New turn of conversation{f' with {username}' if username else ''}.\n"
+                + self.get_maintain_prompt(),
+        })
+        
         # Get tool definitions directly from impressmem tools
         send_tools = self.get_maintain_tool_definitions()
         
@@ -109,15 +116,9 @@ class ImpressionManager(ImpressMemManager):
             tools=send_tools,
         )
         
-        # If the last message is system or user, return
-        if send_messages[-1]["role"] in ["system", "user"]:
+        # Return if there is no assistant message
+        if not any(msg["role"] == "assistant" for msg in send_messages):
             return
-        
-        send_messages.append({
-            "role": "user",
-            "content": f"New turn of conversation{f' with {username}' if username else ''}.\n"
-                + self.get_maintain_prompt(),
-        })
         
         request = {
             "messages": send_messages,

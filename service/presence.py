@@ -47,22 +47,27 @@ class PresenceService:
         """
         model = model if model and model != "default" else conf().get("chat_model")
         
-        # Prepare memory via LLM-judged recall
-        memory = await self._recall_memory(slice_new_turn_messages(messages))
-
         # Extract instructions
         instructions = ""
         if messages[0].get("role") in ("system", "developer"):
             instructions = messages[0]["content"]
             del messages[0]
 
-        # Prepare context for LLM
-        send_messages = self._build_context(
+        # Prepare memory via LLM-judged recall
+        memory = await self._recall_memory(
+            messages=slice_new_turn_messages(messages),
             instructions=instructions,
-            messages=messages,
-            memory=memory,
-            username=username,
         )
+
+        # Build system message
+        system_message = self.context_builder.build_system_message(
+            memory=memory,
+            instructions=instructions
+        )
+        system_message["content"] += f"\n\nCurrent user: {username}" if username else ""
+
+        # Prepare context for LLM
+        send_messages = [system_message] + messages
 
         request = dict(
             **kwargs,
@@ -118,6 +123,7 @@ class PresenceService:
     async def _recall_memory(
         self,
         messages: List[Dict[str, Any]],
+        instructions: str = "",
         model: str = None,
     ) -> str:
         """
@@ -143,9 +149,17 @@ class PresenceService:
         # Get recall tool definition from global tool manager
         send_tools = await self.tool_manager.get_definitions(filter=[RecallImpressionsTool.name])
 
-        send_messages = messages + [{
+        # Prepare context for LLM
+        send_messages = []
+        if instructions:
+            send_messages.append({
+                "role": "system",
+                "content": instructions,
+            })
+        send_messages.extend(messages)
+        send_messages.append({
             "role": "user",
-            "content":
+            "content": (
                 "Memory impression categories:\n"
                 "------\n"
                 f"{', '.join([name for name, _ in reversed(impression_categories)] or [])}\n"
@@ -157,7 +171,8 @@ class PresenceService:
                 "Note:\n"
                 f"- Call {RecallImpressionsTool.name} once if needed.\n"
                 "- If there's no need to recall anything, just reply \"RECENT\" to use recent mixed impressions only."
-        }]
+            )
+        })
 
         request = {
             "messages": send_messages,
@@ -246,43 +261,3 @@ class PresenceService:
         logger.info(f"[Presence] Final memory text units: {count_text_units(memory)} (mixed={len(mixed_impressions)}, recall={len(recall_impressions)})")
 
         return memory
-
-    def _build_context(
-        self,
-        instructions: str,
-        messages: List[Dict[str, Any]],
-        memory: str,
-        username: str,
-    ) -> List[Dict[str, Any]]:
-        """Prepare context for LLM request"""
-        messages = copy.deepcopy(messages)
-
-        # Build system message
-        system_message = self.context_builder.build_system_message(
-            instructions=instructions
-        )
-
-        # Combine system message and messages
-        messages.insert(0, system_message)
-
-        # Inject dynamic context at the start of the last non-tool message
-        last_non_tool_idx = len(messages) - 1 - next(
-            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
-            len(messages) - 1
-        )
-        if last_non_tool_idx >= 0:
-            prepended_content = "\n\n".join(filter(lambda s: s, [
-                memory,
-                "------",
-                f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                "------",
-                f"Current user: {username}" if username else "",
-                "------" if username else "",
-            ]))
-            original_content = messages[last_non_tool_idx]["content"]
-            if isinstance(original_content, list):
-                original_content.insert(0, {"type": "text", "text": prepended_content})
-            else:
-                messages[last_non_tool_idx]["content"] = f"{prepended_content}\n\n{original_content}"
-
-        return messages

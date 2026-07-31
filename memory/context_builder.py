@@ -16,7 +16,7 @@ class ContextBuilder:
 
     MAX_TEXT_UNITS = 100000
     MAX_MESSAGES = 100
-    MAX_MODEL_ROUNDS = 25
+    MAX_MODEL_ROUNDS = 50
 
     @classmethod
     def get_instance(cls):
@@ -48,6 +48,7 @@ class ContextBuilder:
         
         # Build system message
         system_message = self.build_system_message(
+            memory=memory,
             instructions=instructions,
             actions=actions,
             tools=tools,
@@ -95,19 +96,6 @@ class ContextBuilder:
             # Keep only valid fields
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
-        # Inject dynamic context at the start of the last non-tool message
-        last_non_tool_idx = len(messages) - 1 - next(
-            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
-            len(messages) - 1
-        )
-        messages[last_non_tool_idx]["content"] = "\n\n".join(filter(lambda s: s, [
-            memory or "",
-            "------",
-            f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "------",
-            messages[last_non_tool_idx]["content"],
-        ]))
-
         # Append multimodal resources returned from the latest assistant message's tool calls
         if multimodal_parts:
             multimodal_msg = {
@@ -126,6 +114,7 @@ class ContextBuilder:
 
     def build_system_message(
         self,
+        memory: str = "",
         instructions: str = "",
         actions: List[Dict[str, str]] = None,
         tools: List[Dict[str, Any]] = None,
@@ -164,8 +153,8 @@ class ContextBuilder:
                 + "\n".join(
                     f"- <action-{action['name']} args=\"{action.get('args') or ''}\" /> - {action['description']}"
                     for action in actions
-                )
-                + "\n------\n"
+                ) + "\n"
+                + "------\n"
                 + "Note: Do NOT use actions not listed above. Each action tag must be on its own separate line."
             )
 
@@ -176,18 +165,28 @@ class ContextBuilder:
                 + "\n".join(
                     f"- {tool['function']['name']}: {tool['function']['description']}"
                     for tool in tools
-                )
-                + "\n------\n"
+                ) + "\n"
+                + "------\n"
                 + "Note: Prioritize running multiple independent tool calls in parallel within a single response to reduce interaction rounds, "
                 + "while avoiding unnecessary invocations when a direct answer is possible."
             )
 
         if instructions:
-            prompts.append("------ [Instructions] ------")
-            prompts.append(instructions)
+            prompts.append(
+                "Instructions:\n"
+                "------\n\n"
+                f"{instructions}\n\n"
+                "------"
+            )
+
+        if memory:
+            prompts.append(memory)
 
         # Role Prompt (tail, recency reinforcement)
         prompts.append(role_prompt)
+
+        # Current time
+        prompts.append(f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
         return {
             "role": "system",
