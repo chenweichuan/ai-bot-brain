@@ -102,9 +102,11 @@ class DoubaoaiLlmAdapter(LlmClient):
                                             if resp.get("model"):
                                                 model_name = resp["model"]
                                             # 发送初始 chunk（类似 OpenAI 的第一个 delta 为空的 chunk）
-                                            yield self._build_initial_chunk(
+                                            chunk = self._build_initial_chunk(
                                                 response_id, model_name, system_fingerprint
                                             )
+                                            logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                            yield chunk
 
                                         elif event_type == "response.output_item.added":
                                             item = event.get("item", {})
@@ -124,9 +126,11 @@ class DoubaoaiLlmAdapter(LlmClient):
                                                 }
                                                 tool_calls.append(tool_call)
                                                 # 发送 tool_calls 初始 chunk
-                                                yield self._build_tool_call_start_chunk(
+                                                chunk = self._build_tool_call_start_chunk(
                                                     response_id, model_name, tool_call, system_fingerprint
                                                 )
+                                                logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                                yield chunk
                                             # 处理 reasoning 输出项
                                             elif item_type == "reasoning":
                                                 # reasoning 内容通过 response.reasoning_summary_text.delta 事件流式输出
@@ -136,9 +140,11 @@ class DoubaoaiLlmAdapter(LlmClient):
                                             # 推理内容增量
                                             delta_reasoning = event.get("delta", "")
                                             if delta_reasoning:
-                                                yield self._build_reasoning_delta_chunk(
+                                                chunk = self._build_reasoning_delta_chunk(
                                                     response_id, model_name, delta_reasoning, system_fingerprint
                                                 )
+                                                logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                                yield chunk
 
                                         elif event_type == "response.function_call_arguments.delta":
                                             # function call 参数增量
@@ -152,9 +158,11 @@ class DoubaoaiLlmAdapter(LlmClient):
                                                     tc["function"]["arguments"] += delta_args
                                                     break
                                             if tc_index is not None and delta_args:
-                                                yield self._build_tool_call_delta_chunk(
+                                                chunk = self._build_tool_call_delta_chunk(
                                                     response_id, model_name, tc_index, delta_args, system_fingerprint
                                                 )
+                                                logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                                yield chunk
 
                                         elif event_type == "response.output_item.done":
                                             # 输出项完成，无需额外处理（OpenAI 格式无对应事件）
@@ -169,14 +177,16 @@ class DoubaoaiLlmAdapter(LlmClient):
                                             # 转换 usage 格式
                                             openai_usage = self._convert_usage_from_ark(usage)
                                             if openai_usage:
-                                                logger.info(f"[DoubaoAI] Token usage: {json.dumps(openai_usage, ensure_ascii=False)}")
+                                                logger.info(f"[DoubaoAI] Token usage ({model_name}): {json.dumps(openai_usage, ensure_ascii=False)}")
                                             # 发送最终带 usage 和 finish_reason 的 chunk
                                             # 注意：Ark API 即使有 function_call，status 也返回 "completed"
                                             # 需要根据是否累积了 tool_calls 来判断 finish_reason
-                                            yield self._build_final_chunk(
+                                            chunk = self._build_final_chunk(
                                                 response_id, model_name, status, openai_usage, system_fingerprint,
                                                 has_tool_calls=len(tool_calls) > 0
                                             )
+                                            logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                            yield chunk
 
                                         elif event_type == "response.incomplete":
                                             # 响应不完整（如达到 max_output_tokens 限制）
@@ -184,10 +194,12 @@ class DoubaoaiLlmAdapter(LlmClient):
                                             usage_inc = resp_inc.get("usage", {})
                                             openai_usage_inc = self._convert_usage_from_ark(usage_inc) if usage_inc else {}
                                             if openai_usage_inc:
-                                                logger.info(f"[DoubaoAI] Token usage: {json.dumps(openai_usage_inc, ensure_ascii=False)}")
-                                            yield self._build_final_chunk(
+                                                logger.info(f"[DoubaoAI] Token usage ({model_name}): {json.dumps(openai_usage_inc, ensure_ascii=False)}")
+                                            chunk = self._build_final_chunk(
                                                 response_id, model_name, "length", openai_usage_inc, system_fingerprint
                                             )
+                                            logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                            yield chunk
 
                                         elif event_type == "response.failed":
                                             error = event.get("error", {})
@@ -198,17 +210,21 @@ class DoubaoaiLlmAdapter(LlmClient):
                                             # 正文文本增量
                                             delta_text = event.get("delta", "")
                                             if delta_text:
-                                                yield self._build_text_delta_chunk(
+                                                chunk = self._build_text_delta_chunk(
                                                     response_id, model_name, delta_text, system_fingerprint
                                                 )
+                                                logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                                yield chunk
 
                                         elif event_type == "response.refusal.delta":
                                             # 拒绝内容，作为文本增量的一部分传递
                                             delta_text = event.get("delta", "")
                                             if delta_text:
-                                                yield self._build_text_delta_chunk(
+                                                chunk = self._build_text_delta_chunk(
                                                     response_id, model_name, delta_text, system_fingerprint
                                                 )
+                                                logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                                yield chunk
 
                                         else:
                                             # 忽略未识别的事件类型
@@ -247,7 +263,7 @@ class DoubaoaiLlmAdapter(LlmClient):
                     result = self._convert_from_ark_response(ark_result, request["model"])
 
                     if result.get("usage"):
-                        logger.info(f"[DoubaoAI] Token usage: {json.dumps(result['usage'], ensure_ascii=False)}")
+                        logger.info(f"[DoubaoAI] Token usage ({result.get('model', request['model'])}): {json.dumps(result['usage'], ensure_ascii=False)}")
 
                     logger.info(f"[DoubaoAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 

@@ -99,7 +99,8 @@ class OpenaiLlmAdapter(LlmClient):
                                     try:
                                         chunk = json.loads(data)
                                         if chunk.get("usage"):
-                                            logger.info(f"[OpenAI] Token usage: {json.dumps(chunk['usage'], ensure_ascii=False)}")
+                                            logger.info(f"[OpenAI] Token usage ({chunk.get('model', request['model'])}): {json.dumps(chunk['usage'], ensure_ascii=False)}")
+                                        logger.info(f"[OpenAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
                                         yield chunk
                                     except json.JSONDecodeError:
                                         continue
@@ -122,7 +123,7 @@ class OpenaiLlmAdapter(LlmClient):
                     result = response.json()
 
                     if result.get("usage"):
-                        logger.info(f"[OpenAI] Token usage: {json.dumps(result['usage'], ensure_ascii=False)}")
+                        logger.info(f"[OpenAI] Token usage ({result.get('model', request['model'])}): {json.dumps(result['usage'], ensure_ascii=False)}")
 
                     logger.info(f"[OpenAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 

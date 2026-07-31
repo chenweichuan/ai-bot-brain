@@ -8,7 +8,7 @@ import time
 from typing import Dict, List, Any, AsyncGenerator, Optional
 
 from common.log import logger
-from common.message import count_text_units
+from common.message import count_text_units, count_messages_text_units
 from common.redis import RedisClient
 from config import conf
 from memory.context_builder import ContextBuilder
@@ -20,8 +20,10 @@ from tools.flowcontrol import FlowWaitForInputTool, FlowCompleteTool
 
 
 class AgentService:
-    """Agent that handles LLM requests with tools calling and looping"""
+    """Agent that handles LLM requests with tools calling and looping capability"""
     _instance = None
+
+    HISTORY_REDUCTION_RATIO = 0.7
 
     @classmethod
     def get_instance(cls):
@@ -39,6 +41,7 @@ class AgentService:
 
         self.bot_name = conf().get("bot_name", "Bot")
         self.KEY_PREFIX = f"{self.bot_name.lower().replace(' ', '_')}:agent"
+        self.HISTORY_STARTING_MESSAGE_ID_KEY = f"{self.KEY_PREFIX}:history_starting_message_id:%s"
         
         # Client action waiters: {session_id: asyncio.Event}
         self.client_action_waiters: Dict[str, asyncio.Event] = {}
@@ -224,8 +227,15 @@ class AgentService:
 
         # Prepare memory
         memory = await self.impression_manager.build_memory_context()
+
+        # Read history start marker from Redis
+        from_message_id = await self._get_history_starting_message_id(session_id)
+
+        # Fetch history starting from marker
         history = await self.session_manager.get_message_history(
-            session_id=session_id, limit=ContextBuilder.MAX_MESSAGES
+            session_id=session_id,
+            from_message_id=from_message_id,
+            limit=ContextBuilder.MAX_MESSAGES,
         )
 
         # Prepare actions for LLM - prepend wait action when client actions are present
@@ -371,6 +381,15 @@ class AgentService:
         finally:
             bot_message["streaming"] = False
             await self.session_manager.save_message(session_id, bot_message)
+            # Update history range marker based on three MAX thresholds (async, non-blocking)
+            asyncio.create_task(self._update_history_marker(
+                session_id=session_id,
+                send_messages=send_messages,
+                history=history,
+                max_text_units=max_text_units,
+                max_messages=max_messages,
+                max_model_rounds=max_model_rounds,
+            ))
             # If bot_message has content or tool_calls, enqueue memory maintenance
             if bot_message.get("content") or bot_message.get("tool_calls"):
                 await self.impression_manager.enqueue_maintain(
@@ -451,6 +470,102 @@ class AgentService:
             new_msg_ids.append(msg["id"])
     
         return new_msg_ids
+
+    async def _get_history_starting_message_id(self, session_id: str) -> Optional[str]:
+        """从Redis读取会话history读取起始message_id标记"""
+        key = self.HISTORY_STARTING_MESSAGE_ID_KEY % session_id
+        return await self.redis_client.get(key)
+
+    async def _set_history_starting_message_id(self, session_id: str, message_id: str):
+        """将会话history读取起始message_id标记写入Redis"""
+        key = self.HISTORY_STARTING_MESSAGE_ID_KEY % session_id
+        await self.redis_client.set(key, message_id)
+        logger.info(f"[Agent] Set history from_message_id for session {session_id}: {message_id}")
+
+    async def _update_history_marker(
+        self,
+        session_id: str,
+        send_messages: List[Dict[str, Any]],
+        history: List[Dict[str, Any]],
+        max_text_units: int,
+        max_messages: int,
+        max_model_rounds: int,
+    ):
+        """
+        根据三个MAX维度判断history读取范围缩减策略，取最激进的截断点更新Redis标记：
+        1. send_messages条数 >= MAX_MESSAGES → 缩减到最新70%*MAX条数消息
+        2. assistant条数 >= MAX_MODEL_ROUNDS → 缩减到最新70%*MAX条assistant消息
+        3. send_messages+bot_message总text_units >= MAX_TEXT_UNITS → 缩减到最新70%*MAX - system units
+
+        send_messages[0]为system消息，send_messages[1:]对应过滤后的history，
+        通过偏移量 (send_messages_idx - 1) 近似映射回原始history获取message_id。
+        30%的缩减余量足以容纳filter_history造成的偏移误差。
+        """
+        try:
+            # Append new round message(s) to send_messages
+            last_history_assistant_idx = len(history) - 1 - next((i for i, msg in enumerate(reversed(history)) if msg["role"] == "assistant"), 0)
+            send_messages += history[last_history_assistant_idx:]
+            
+            ratio = self.HISTORY_REDUCTION_RATIO
+            candidate_boundary_idx = -1  # boundary index in send_messages
+
+            # Check 1: MAX_MESSAGES - total message count
+            if len(send_messages) >= max_messages:
+                keep_count = int(max_messages * ratio)
+                boundary_idx = len(send_messages) - keep_count
+                candidate_boundary_idx = max(candidate_boundary_idx, boundary_idx)
+                logger.info(
+                    f"[Agent] MAX_MESSAGES triggered: {len(send_messages)} >= {max_messages}, "
+                    f"keep latest {keep_count}"
+                )
+
+            # Check 2: MAX_MODEL_ROUNDS - assistant message count
+            assistant_idxes = [
+                i for i, msg in enumerate(send_messages)
+                if msg.get("role") == "assistant"
+            ]
+            if len(assistant_idxes) >= max_model_rounds:
+                keep_count = int(max_model_rounds * ratio)
+                boundary_idx = assistant_idxes[-keep_count]
+                candidate_boundary_idx = max(candidate_boundary_idx, boundary_idx)
+                logger.info(
+                    f"[Agent] MAX_MODEL_ROUNDS triggered: {len(assistant_idxes)} >= {max_model_rounds}, "
+                    f"keep latest {keep_count} assistant messages"
+                )
+
+            # Check 3: MAX_TEXT_UNITS - total text units
+            total_units = count_messages_text_units(send_messages)
+            if total_units >= max_text_units:
+                system_units = count_messages_text_units([send_messages[0]])
+                target_units = int(max_text_units * ratio) - system_units
+
+                accumulated = 0
+                # Iterate backward, skip system message at index 0
+                for i in range(len(send_messages) - 1, 0, -1):
+                    msg_units = count_messages_text_units([send_messages[i]])
+                    if accumulated + msg_units > target_units:
+                        candidate_boundary_idx = max(candidate_boundary_idx, i)
+                        logger.info(
+                            f"[Agent] MAX_TEXT_UNITS triggered: {total_units} >= {max_text_units}, "
+                            f"target units: {target_units}, boundary at send_messages index {i}"
+                        )
+                        break
+                    accumulated += msg_units
+
+            # Map send_messages boundary index to original history via backward offset from tail
+            if candidate_boundary_idx >= 1:
+                history_backword_idx = len(send_messages) - candidate_boundary_idx
+                if 1 <= history_backword_idx <= len(history):
+                    message_id = history[-history_backword_idx].get("id")
+                    if message_id:
+                        await self._set_history_starting_message_id(session_id, message_id)
+                        logger.info(
+                            f"[Agent] History marker set: send_messages[{candidate_boundary_idx}] "
+                            f"-> history[{-history_backword_idx}] -> {message_id}"
+                        )
+        except Exception as e:
+            logger.error(f"[Agent] Failed to update history marker for session {session_id}: {e}")
+            logger.exception(e)
 
     async def _detect_action_call(
         self,

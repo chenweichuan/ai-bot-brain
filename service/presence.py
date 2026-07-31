@@ -59,15 +59,13 @@ class PresenceService:
             instructions=instructions,
         )
 
-        # Build system message
-        system_message = self.context_builder.build_system_message(
-            memory=memory,
-            instructions=instructions
-        )
-        system_message["content"] += f"\n\nCurrent user: {username}" if username else ""
-
         # Prepare context for LLM
-        send_messages = [system_message] + messages
+        send_messages = self._build_context(
+            instructions=instructions,
+            messages=messages,
+            memory=memory,
+            username=username,
+        )
 
         request = dict(
             **kwargs,
@@ -261,3 +259,43 @@ class PresenceService:
         logger.info(f"[Presence] Final memory text units: {count_text_units(memory)} (mixed={len(mixed_impressions)}, recall={len(recall_impressions)})")
 
         return memory
+
+    def _build_context(
+        self,
+        instructions: str,
+        messages: List[Dict[str, Any]],
+        memory: str = "",
+        username: str = None,
+     ) -> List[Dict[str, Any]]:
+        """Prepare context for LLM request"""
+        messages = copy.deepcopy(messages)
+
+        # Build system message
+        system_message = self.context_builder.build_system_message(
+            instructions=instructions
+        )
+
+        # Combine system message and messages
+        messages = [system_message] + messages
+
+        # Inject dynamic context at the start of the last non-tool message
+        last_non_tool_idx = len(messages) - 1 - next(
+            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
+            len(messages) - 1
+        )
+        if last_non_tool_idx >= 0:
+            prepended_content = "\n\n".join(filter(lambda s: s, [
+                memory,
+                "------",
+                f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                "------",
+                f"Current user: {username}" if username else "",
+                "------" if username else "",
+            ]))
+            original_content = messages[last_non_tool_idx]["content"] or ""
+            if isinstance(original_content, list):
+                original_content.insert(0, {"type": "text", "text": prepended_content})
+            else:
+                messages[last_non_tool_idx]["content"] = f"{prepended_content}\n\n{original_content}"
+
+        return messages

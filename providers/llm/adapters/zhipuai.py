@@ -116,7 +116,8 @@ class ZhipuaiLlmAdapter(LlmClient):
                                     try:
                                         chunk = json.loads(data)
                                         if chunk.get("usage"):
-                                            logger.info(f"[ZhipuAI] Token usage: {json.dumps(chunk['usage'], ensure_ascii=False)}")
+                                            logger.info(f"[ZhipuAI] Token usage ({chunk.get('model', request['model'])}): {json.dumps(chunk['usage'], ensure_ascii=False)}")
+                                        logger.info(f"[ZhipuAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
                                         yield chunk
                                     except json.JSONDecodeError:
                                         continue
@@ -139,7 +140,7 @@ class ZhipuaiLlmAdapter(LlmClient):
                     result = response.json()
 
                     if result.get("usage"):
-                        logger.info(f"[ZhipuAI] Token usage: {json.dumps(result['usage'], ensure_ascii=False)}")
+                        logger.info(f"[ZhipuAI] Token usage ({result.get('model', request['model'])}): {json.dumps(result['usage'], ensure_ascii=False)}")
 
                     logger.info(f"[ZhipuAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 
