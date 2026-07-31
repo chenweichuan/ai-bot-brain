@@ -57,7 +57,7 @@ class ImpressionManager(ImpressMemManager):
             categories_per_set=500,
             labels_per_set=1500,
             clues_per_set=500,
-            impression_text_units_per_set=15000,
+            impression_text_units_per_set=10000,
             unpinned_emoji="⚪",
             pinned_emoji="📌",
         )

@@ -136,7 +136,7 @@ class PresenceService:
         impression_labels = await self.impression_manager.get_mixed_labels()
 
         # Always get recent mixed impressions as baseline (includes pinned)
-        mixed_impressions = await self.impression_manager.get_mixed_impressions(max_text_units=10000)
+        mixed_impressions = await self.impression_manager.get_mixed_impressions()
         # mixed_impressions: List[(pin_emoji, (clue, content), score)], sorted desc
         mixed_clue_set = {clue for _, (clue, _), _ in mixed_impressions}
 
@@ -223,9 +223,7 @@ class PresenceService:
         # Get dynamic recall impressions (only if we have new clues)
         recall_impressions: List[tuple[tuple[str, str], float]] = []
         if recall_clue_tuples:
-            recall_impressions = await self.impression_manager.get_impressions_by_clues(
-                recall_clue_tuples, max_text_units=10000
-            )
+            recall_impressions = await self.impression_manager.get_impressions_by_clues(recall_clue_tuples)
 
         # Merge mixed + dynamic recall impressions, sort by score asc (oldest first)
         # mixed format: (pin_emoji, (clue, content), score)
