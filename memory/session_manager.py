@@ -180,8 +180,8 @@ class SessionManager:
         try:
             message_ids_key = self.MESSAGE_IDS_ZSET_KEY % session_id
             
-            # 获取最新的limit条消息ID（按时间戳升序排列，从远到近）
-            message_ids = await self.redis_client.zrange(message_ids_key, -limit, -1)
+            # 获取limit*1.5条消息ID，避免过滤条件因为边界问题无法匹配（按时间戳升序排列，从远到近）
+            message_ids = await self.redis_client.zrange(message_ids_key, -int(limit*1.5), -1)
 
             # 如果有from_message_id，从该ID开始过滤
             if from_message_id:
@@ -195,6 +195,9 @@ class SessionManager:
             
             if not message_ids:
                 return []
+            
+            # 截取后limit条消息ID
+            message_ids = message_ids[-limit:]
             
             # 批量获取消息内容
             messages = await self.multi_get_messages(message_ids)
