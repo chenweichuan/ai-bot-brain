@@ -34,9 +34,9 @@ class MemoryService:
         """
         获取自动思考会话消息历史
         """
-        from scheduler.inner_mode import InnerModeScheduler
+        from service.autopilot import AutopilotService
         
-        auto_scheduler = InnerModeScheduler.get_instance()
+        auto_scheduler = AutopilotService.get_instance()
         
         session_id = await self.redis_client.get(auto_scheduler.SESSION_ID_KEY)
         

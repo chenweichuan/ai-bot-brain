@@ -11,7 +11,7 @@ from common.log import logger
 from common.redis import RedisClient
 from providers.storage.client import StorageClient
 from common.tmp_dir import TmpDir
-from scheduler.inner_mode import InnerModeScheduler
+from service.autopilot import AutopilotService
 from service.memory import MemoryService
 from service.primitives import PrimitivesService
 from service.agent import AgentService
@@ -48,8 +48,8 @@ async def startup(app: web.Application):
     # 初始化Presence服务
     presence_service = PresenceService()
 
-    # 启动AutoScheduler
-    InnerModeScheduler.setup()
+    # 启动AutopilotService
+    AutopilotService.setup()
 
     logger.info("[API] All services initialized successfully")
 

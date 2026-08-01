@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Agent scheduler script that runs the agent's think method every minute with safety lock
+Autopilot service that periodically triggers the agent's autonomous thinking
+cycle with a distributed safety lock to prevent concurrent execution.
 """
 import asyncio
 import time
-import os
 from typing import Optional
 
 from config import conf
@@ -15,13 +15,14 @@ from memory.session_manager import SessionManager
 from service.agent import AgentService
 
 
-class InnerModeScheduler:
-    """Auto scheduler for running agent think method with concurrency control"""
-    _instance: Optional['InnerModeScheduler'] = None
+class AutopilotService:
+    """Autopilot service that periodically runs the agent's autonomous think
+    loop with distributed concurrency control."""
+    _instance: Optional['AutopilotService'] = None
     
     @classmethod
     def get_instance(cls):
-        """Get singleton instance of AutoScheduler"""
+        """Get the singleton AutopilotService instance."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -36,7 +37,7 @@ class InnerModeScheduler:
 
         self.SESSION_ID_KEY = f"{self.KEY_PREFIX}:session_id"
         self.LOCK_KEY = f"{self.KEY_PREFIX}:running_lock"
-        self.LOCK_TIMEOUT = 30  # Lock expires
+        self.LOCK_TIMEOUT = 30  # Lock TTL in seconds
         self.SCHEDULER_INTERVAL = conf().get("auto_scheduler_interval", 3600)
 
     async def _acquire_lock(self) -> bool:
@@ -54,7 +55,7 @@ class InnerModeScheduler:
                 ex=self.LOCK_TIMEOUT
             )
             
-            # 自动持续刷新过期时间机制
+            # Kick off a background task to keep refreshing the lock TTL
             if result is not None:
                 asyncio.create_task(self._refresh_lock_expiration())
             
@@ -64,7 +65,8 @@ class InnerModeScheduler:
             return False
             
     async def _refresh_lock_expiration(self):
-        """Periodically refresh lock expiration"""
+        """Periodically refresh the lock TTL so long-running think cycles
+        don't lose the lock midway through execution."""
         while await self.redis_client.exists(self.LOCK_KEY):
             await asyncio.sleep(self.LOCK_TIMEOUT // 2)
             await self.redis_client.expire(self.LOCK_KEY, self.LOCK_TIMEOUT)
@@ -102,11 +104,11 @@ class InnerModeScheduler:
             return None
 
     async def run_agent_think(self):
-        """Run the agent's think method with appropriate parameters"""
+        """Execute one autonomous agent thinking session via the agent service."""
         logger.info("=== Starting agent autonomous thinking session ===")
         
         try:
-            # Create prompt telling the agent it's autonomous time
+            # Build the autopilot prompt that puts the agent into autonomous mode
             instructions = f"""Now it's your own Inner Thinking Mode time. 
 No user interaction is required and no user will see your inner thoughts.
 You can:
@@ -114,8 +116,11 @@ You can:
 - Check for new messages from all sources to see if there's anything that need to reply.
 - Think about any other things you can do and planning future tasks."""
 
-            async for chunk in self.agent_service.think(instructions=instructions):
-                # Capture and save session_id
+            async for chunk in self.agent_service.think(
+                instructions=instructions,
+                model=conf().get("autopilot_model"),
+            ):
+                # Capture the session ID from the response chunk and persist it
                 if "session_id" in chunk:
                     session_id = chunk["session_id"]
                     await self._save_session_id(session_id)
@@ -127,22 +132,22 @@ You can:
             logger.exception(e)
             
     async def start_scheduler(self):
-        """Main task that runs with safety check"""
-        # Check if we can acquire the lock
+        """Run a single autopilot iteration under the distributed safety lock."""
+        # Try to acquire the lock; skip this iteration if another run is active
         if not await self._acquire_lock():
             logger.info("Previous execution is still running, skipping this iteration")
             return
 
         try:
-            # Run the agent think method
+            # Execute the agent's autonomous think cycle
             await self.run_agent_think()
         finally:
-            # Release the lock
+            # Always release the lock, even if the think cycle raised
             await self._release_lock()
             
     @classmethod
     def setup(cls):
-        """Setup AutoScheduler"""
+        """Initialize the singleton and start the autopilot background loop."""
         _instance = cls.get_instance()
         
         async def master_scheduler():
