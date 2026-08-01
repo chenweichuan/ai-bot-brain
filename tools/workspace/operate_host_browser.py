@@ -80,6 +80,8 @@ class OperateHostBrowserTool(Tool):
             if operation == "launch":
                 returncode, _, stderr_text = await self.computer_client.launch_browser()
                 if returncode == 0:
+                    _pages = []
+                    _current_idx = 0
                     result = "✅ Browser launched successfully"
                     summary = "✅ Browser launched"
                 else:
@@ -88,6 +90,8 @@ class OperateHostBrowserTool(Tool):
             elif operation == "exit":
                 returncode, _, stderr_text = await self.computer_client.exit_browser()
                 if returncode == 0:
+                    _pages = []
+                    _current_idx = 0
                     result = "✅ Browser closed successfully"
                     summary = "✅ Browser closed"
                 else:

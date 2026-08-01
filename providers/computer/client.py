@@ -2,6 +2,8 @@
 Computer operation module - client implementation
 """
 import asyncio
+import json
+import os
 import shlex
 import subprocess
 import distro
@@ -325,8 +327,23 @@ class ComputerClient:
 
     async def launch_browser(self, display: str = None) -> tuple[int, str, str]:
         """Launch browser with remote debugging port"""
+        # Use a dedicated data directory to avoid conflicts with existing browser profiles
+        data_dir = f"/opt/{self.os_user}/chromium_data"
+        # Reset crash recovery state to suppress "Restore pages?" bubble
+        prefs_path = os.path.join(data_dir, "Default", "Preferences")
+        if os.path.exists(prefs_path):
+            try:
+                with open(prefs_path, "r") as f:
+                    prefs = json.load(f)
+                prefs.setdefault("profile", {})["exit_type"] = "Normal"
+                prefs["profile"]["exited_cleanly"] = True
+                with open(prefs_path, "w") as f:
+                    json.dump(prefs, f)
+            except Exception:
+                pass
+        # Launch Chromium with remote debugging port and necessary flags
         cmd = f"/usr/bin/chromium-browser --remote-debugging-port=9222 " \
-            "--user-data-dir=/opt/witron/chromium_data " \
+            f"--user-data-dir={data_dir} " \
             "--start-maximized " \
             "--test-type " \
             "--no-first-run " \
