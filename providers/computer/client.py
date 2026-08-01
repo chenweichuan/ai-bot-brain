@@ -339,7 +339,8 @@ class ComputerClient:
                 prefs["profile"]["exited_cleanly"] = True
                 with open(prefs_path, "w") as f:
                     json.dump(prefs, f)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"[ComputerClient] Failed to reset browser crash recovery state: {e}")
                 pass
         # Launch Chromium with remote debugging port and necessary flags
         cmd = f"/usr/bin/chromium-browser --remote-debugging-port=9222 " \
@@ -360,6 +361,9 @@ class ComputerClient:
             "> /dev/null 2>&1 &"
         result = await self.exec_desktop(cmd, 10, display)
         await asyncio.sleep(3)
+        # Ensure the data directory has proper permissions for the bot group
+        await self.exec_command(f"chmod -R g+rwX {data_dir}")
+        # Return the result of the launch command
         return result
 
     async def exit_browser(self, display: str = None) -> tuple[int, str, str]:

@@ -104,10 +104,16 @@ class OperateHostBrowserTool(Tool):
                 page = get_current_page()
                 
                 if operation == "new_tab":
+                    url = tool_args.get("url")
                     contexts = browser.contexts
                     if not contexts:
                         raise Exception("No browser context available")
-                    await contexts[0].new_page()
+                    page = await contexts[0].new_page()
+                    if url:
+                        try:
+                            await page.goto(url, timeout=5000, wait_until="domcontentloaded")
+                        except Exception as e:
+                            pass
                     _pages = await self.computer_client.get_browser_pages()
                     _current_idx = len(_pages) - 1
                     result = summary = f"✅ New tab opened successfully, current tab count: {len(_pages)}, active tab index: {_current_idx}."
