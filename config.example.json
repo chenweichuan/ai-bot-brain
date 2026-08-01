@@ -21,7 +21,12 @@
   "autopilot_model": "doubao-seed-2.0-lite",
   "memory_model": "doubao-seed-2.0-lite",
   "image_model": "doubao-seedream-5.0-lite",
-  "round_limit_think": 100,
+  "max_context_text_units": 100000,
+  "max_context_messages": 100,
+  "max_context_model_rounds": 30,
+  "max_impression_text_units_per_set": 10000,
+  "max_think_rounds": 100,
+  "auto_scheduler_interval": 3600,
   "rate_limit_image": 5,
   "model_providers": [
     {
@@ -70,6 +75,5 @@
   "tencent_search_secret_key": "your_tencent_search_secret_key",
   "volc_search_api_key": "your_volc_search_api_key",
   "proxy_pool_url": "http://127.0.0.1:5010/get/",
-  "chromium_path": "/usr/bin/chromium-browser",
-  "auto_scheduler_interval": 3600
+  "chromium_path": "/usr/bin/chromium-browser"
 }

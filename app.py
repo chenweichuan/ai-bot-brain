@@ -561,6 +561,7 @@ async def presence_chat(request: web.Request) -> web.Response:
                     f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode('utf-8')
                 )
             await response.write(b"data: [DONE]\n\n")
+
             return response
         else:
             # 非流式响应

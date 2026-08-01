@@ -26,7 +26,7 @@ class ZhipuaiLlmAdapter(LlmClient):
             # 非user角色不支持结构化信息，转为纯文本
             if msg["role"] != "user":
                 msg["content"] = stringify_message_content(msg.get("content"))
-            # user结构化消息里的文件转为base64
+            # user结构化消息里自定义的参数格式进行转换
             if msg["role"] == "user" and isinstance(msg["content"], list):
                 for part in msg["content"]:
                     if part["type"] == "image":
@@ -115,9 +115,9 @@ class ZhipuaiLlmAdapter(LlmClient):
                                         break
                                     try:
                                         chunk = json.loads(data)
+                                        logger.info(f"[ZhipuAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
                                         if chunk.get("usage"):
                                             logger.info(f"[ZhipuAI] Token usage ({chunk.get('model', request['model'])}): {json.dumps(chunk['usage'], ensure_ascii=False)}")
-                                        logger.info(f"[ZhipuAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
                                         yield chunk
                                     except json.JSONDecodeError:
                                         continue
@@ -139,10 +139,9 @@ class ZhipuaiLlmAdapter(LlmClient):
 
                     result = response.json()
 
+                    logger.info(f"[ZhipuAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
                     if result.get("usage"):
                         logger.info(f"[ZhipuAI] Token usage ({result.get('model', request['model'])}): {json.dumps(result['usage'], ensure_ascii=False)}")
-
-                    logger.info(f"[ZhipuAI] LLM response: {json.dumps(result, ensure_ascii=False)}")
 
                     return result
                 except Exception as e:

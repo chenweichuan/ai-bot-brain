@@ -23,6 +23,7 @@ class AgentService:
     """Agent that handles LLM requests with tools calling and looping capability"""
     _instance = None
 
+    MAX_THINK_ROUNDS = conf().get("max_think_rounds", 100)
     HISTORY_REDUCTION_RATIO = 0.7
 
     @classmethod
@@ -58,8 +59,7 @@ class AgentService:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Main thinking loop that handles multi-round iteration"""
         messages = messages or []
-        depth = 0
-        max_depth = conf().get("round_limit_think", 100)
+        current_round = 0
 
         # Prepare session
         session_id = await self._prepare_session(username, session_id)
@@ -78,7 +78,7 @@ class AgentService:
             async for chunk in self._think_round(
                 username=username,
                 session_id=session_id,
-                depth=depth,
+                current_round=current_round,
                 active_time=active_time,
                 **kargs
             ):
@@ -93,11 +93,12 @@ class AgentService:
                 yield { "finish_reason": "stop" }
                 return
 
-            # Handling iterative depth
-            depth += 1
-            if depth >= max_depth:
-                logger.info(f"[Agent] Think {session_id} has reached the max_depth ")
-                yield { "finish_reason": "depth" }
+            # Handling iterative rounds
+            current_round += 1
+            if current_round >= self.MAX_THINK_ROUNDS:
+                logger.info(f"[Agent] Think {session_id} has reached the max rounds {self.MAX_THINK_ROUNDS}")
+                yield { "finish_reason": "rounds" }
+                return
 
             # Add small delay to avoid overwhelming the system
             await asyncio.sleep(0.01)
@@ -214,7 +215,7 @@ class AgentService:
         max_text_units: int = ContextBuilder.MAX_TEXT_UNITS,
         max_messages: int = ContextBuilder.MAX_MESSAGES,
         max_model_rounds: int = ContextBuilder.MAX_MODEL_ROUNDS,
-        depth: int = 0,
+        current_round: int = 0,
         active_time: Optional[float] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Single thinking round that handles LLM call and action/tool processing"""
@@ -265,7 +266,7 @@ class AgentService:
             max_model_rounds=max_model_rounds,
         )
 
-        logger.info(f"[Agent] Start thinking, depth: {depth}, session_id: {session_id}, active_time: {active_time}")
+        logger.info(f"[Agent] Start thinking, round: {current_round}, session_id: {session_id}, active_time: {active_time}")
 
         # Create bot message placeholder
         bot_message = self.session_manager.create_message({
@@ -331,7 +332,7 @@ class AgentService:
                             content=bot_message["content"],
                             last_end_pos=last_action_end_pos,
                             session_id=session_id,
-                            depth=depth,
+                            current_round=current_round,
                         ):
                             if "action_call" in item:
                                 yield item
@@ -357,7 +358,7 @@ class AgentService:
                 await self.session_manager.save_message(session_id, bot_message)
  
             logger.info(
-                f"[Agent] Finish thinking step, depth: {depth}, "
+                f"[Agent] Finish thinking step, round: {current_round}, "
                 f"message: {json.dumps(bot_message, ensure_ascii=False)}"
             )
 
@@ -369,7 +370,7 @@ class AgentService:
                     session_id=session_id,
                     active_time=active_time,
                     history=history,
-                    depth=depth,
+                    current_round=current_round,
                 ):
                     yield chunk
         except Exception as e:
@@ -572,7 +573,7 @@ class AgentService:
         content: str,
         last_end_pos: int,
         session_id: str,
-        depth: int,
+        current_round: int,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Detect new action call in the content, skipping code blocks.
@@ -605,7 +606,7 @@ class AgentService:
         yield { "end_pos": last_end_pos }
 
         logger.info(
-            f"[Agent] <action-{action_call['name']} args=\"{action_call['args']}\" />, depth: {depth}"
+            f"[Agent] <action-{action_call['name']} args=\"{action_call['args']}\" />, round: {current_round}"
         )
 
         # For wait action, block after yielding
@@ -633,7 +634,7 @@ class AgentService:
         session_id: str,
         active_time: float,
         history: List[Dict[str, Any]],
-        depth: int,
+        current_round: int,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute all tool calls in order.
@@ -681,7 +682,7 @@ class AgentService:
 
             logger.info(
                 f"[Agent] Call {'host' if is_host_tool else 'client'} tool {tool_call['function']['name']}, "
-                f"depth: {depth}, message: {json.dumps(tool_message, ensure_ascii=False)}"
+                f"round: {current_round}, message: {json.dumps(tool_message, ensure_ascii=False)}"
             )
 
     async def _wait_for_client_tool_result(

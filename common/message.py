@@ -8,18 +8,27 @@ def truncate_media_urls_for_logging(request: dict) -> dict:
     """
     Create a copy of the request with media URLs truncated to 300 characters for logging.
     """
-    log_request = copy.deepcopy(request)
+    request = copy.deepcopy(request)
     
-    if "messages" in log_request:
-        for msg in log_request["messages"]:
+    if "messages" in request:
+        for msg in request["messages"]:
             if not isinstance(msg.get("content"), list):
                 continue
             for part in msg["content"]:
                 for item in part.values():
                     if isinstance(item, dict) and "url" in item and len(item["url"]) > 300:
                         item["url"] = item["url"][:300] + "...[truncated]"
-    
-    return log_request
+
+    if "input" in request:
+        for msg in request["input"]:
+            if not isinstance(msg.get("content"), list):
+                continue
+            for part in msg["content"]:
+                for key, value in part.items():
+                    if isinstance(value, str) and value.startswith("data:") and len(value) > 300:
+                        part[key] = value[:300] + "...[truncated]"
+
+    return request
 
 
 def count_text_units(text: str) -> int:
