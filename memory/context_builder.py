@@ -4,6 +4,7 @@ Context Manager for handling conversation context and history
 import copy
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import uuid
 
 from common.log import logger
 from common.message import count_text_units, stringify_message_content, count_messages_text_units
@@ -95,18 +96,20 @@ class ContextBuilder:
             # Keep only valid fields
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
-        # Inject dynamic context at the start of the last non-tool message
+        # Inject dynamic context as a synthetic __memory__ tool call
+        # before the last non-tool message (ephemeral, not persisted to history)
         last_non_tool_idx = len(messages) - 1 - next(
             (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
             len(messages) - 1
         )
-        messages[last_non_tool_idx]["content"] = "\n\n".join(filter(lambda s: s, [
-            memory or "",
-            "------",
-            f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            "------",
-            messages[last_non_tool_idx]["content"],
-        ]))
+        messages.insert(last_non_tool_idx, {
+            "role": "system",
+            "content": "\n\n".join(filter(None, [
+                memory or "",
+                "------",
+                f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            ]))
+        })
 
         # Append multimodal resources returned from the latest assistant message's tool calls
         if multimodal_parts:

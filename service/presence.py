@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import time
 from typing import Optional, List, Dict, Any, AsyncGenerator
+import uuid
 
 from common.log import logger
 from common.message import count_text_units
@@ -276,24 +277,22 @@ class PresenceService:
         # Combine system message and messages
         messages = [system_message] + messages
 
-        # Inject dynamic context at the start of the last non-tool message
+        # Inject dynamic context as a synthetic system message
+        # before the last non-tool message (ephemeral, not persisted to history)
         last_non_tool_idx = len(messages) - 1 - next(
             (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
             len(messages) - 1
         )
-        if last_non_tool_idx >= 0:
-            prepended_content = "\n\n".join(filter(lambda s: s, [
-                memory,
+        messages.insert(last_non_tool_idx, {
+            "role": "system",
+            "content": "\n\n".join(filter(None, [
+                memory or "",
                 "------",
                 f"Now time is {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 "------",
                 f"Current user: {username}" if username else "",
                 "------" if username else "",
             ]))
-            original_content = messages[last_non_tool_idx]["content"] or ""
-            if isinstance(original_content, list):
-                original_content.insert(0, {"type": "text", "text": prepended_content})
-            else:
-                messages[last_non_tool_idx]["content"] = f"{prepended_content}\n\n{original_content}"
+        })
 
         return messages
