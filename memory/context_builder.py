@@ -15,7 +15,7 @@ class ContextBuilder:
     """Manager for building and managing conversation context"""
     _instance = None
 
-    MAX_TEXT_UNITS = 80000
+    MAX_TEXT_UNITS = 100000
     MAX_MESSAGES = 100
     MAX_MODEL_ROUNDS = 30
 
