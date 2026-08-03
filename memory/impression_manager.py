@@ -4,6 +4,7 @@
 """
 import asyncio
 import copy
+from datetime import datetime
 import json
 import time
 from typing import List, Dict, Any, Optional
@@ -75,50 +76,52 @@ class ImpressionManager(ImpressMemManager):
 
     async def maintain_impressions_by_llm(
         self,
-        messages: List[Dict[str, Any]],
+        history: List[Dict[str, Any]],
         instructions: str = "",
-        model: str = None,
         username: str = None,
     ) -> None:
         """
-        Save impression entries based on the messages
+        Save impression entries based on the history and instructions.
 
         Args:
-            messages: Conversation messages
-            model: LLM model name to use
+            history: Conversation history
             instructions: Instructions for the LLM
             username: Username of the user
         """
         # Make LLM request to save or organize impressions using impressmem's tools directly
-        messages = copy.deepcopy(messages or [])
-        model = model if model and model != "default" else conf().get("memory_model")
+        history=copy.deepcopy(history)
+        model = conf().get("memory_model")
+        
+        # Return if there is no assistant message
+        if not any(msg["role"] == "assistant" for msg in history):
+            return
+        
+        # Build memory context for the LLM
         memory = await self.build_memory_context()
 
-        # Remove reasoning
-        for msg in messages:
-            msg["reasoning_content"] = None
+        # Preprocess custom msg fields
+        for item in history:
+            if item.get("timestamp"):
+                item["timestamp"] = datetime.fromtimestamp(item['timestamp'] // 1_000).strftime('%Y-%m-%d %H:%M:%S')
 
-        # Append maintain instructions
-        messages.append({
-            "role": "user",
-            "content": f"New turn of conversation{f' with {username}' if username else ''}.\n"
-                + self.get_maintain_prompt(),
-        })
-        
         # Get tool definitions directly from impressmem tools
         send_tools = self.get_maintain_tool_definitions()
         
         # Build context
         send_messages = self.context_builder.build_context(
-            history=messages,
+            history=[{
+                "role": "user",
+                "content": (
+                    f"New turn of conversation{f' with {username}' if username else ''}:\n"
+                    "------\n"
+                    f"{json.dumps(history, ensure_ascii=False, indent=2)}\n"
+                    "------\n\n"
+                    f"{self.get_maintain_prompt()}"
+                )
+            }],
             memory=memory,
             instructions=instructions,
-            tools=send_tools,
         )
-        
-        # Return if there is no assistant message
-        if not any(msg["role"] == "assistant" for msg in send_messages):
-            return
         
         request = {
             "messages": send_messages,
@@ -144,7 +147,7 @@ class ImpressionManager(ImpressMemManager):
 
     async def enqueue_maintain(
         self,
-        messages: List[Dict[str, Any]],
+        history: List[Dict[str, Any]],
         instructions: str = "",
         username: str = None,
     ) -> None:
@@ -153,7 +156,7 @@ class ImpressionManager(ImpressMemManager):
         Non-blocking: returns immediately after putting task into queue.
 
         Args:
-            messages: Conversation messages to maintain from
+            history: Conversation history to maintain from
             username: Username of the user
             instructions: Instructions for the LLM
         """
@@ -163,7 +166,7 @@ class ImpressionManager(ImpressMemManager):
                 self._maintain_queue.get_nowait()
                 logger.warning("[ImpressionManager] Memory queue is full. Evicting oldest task to make space.")
             self._maintain_queue.put_nowait({
-                "messages": messages,
+                "history": history,
                 "instructions": instructions,
                 "username": username,
             })
@@ -187,7 +190,7 @@ class ImpressionManager(ImpressMemManager):
                 task = await self._maintain_queue.get()
                 try:
                     await self.maintain_impressions_by_llm(
-                        messages=task["messages"],
+                        history=task["history"],
                         instructions=task.get("instructions", ""),
                         username=task.get("username"),
                     )

@@ -47,11 +47,11 @@ class PrimitivesService:
 
     # ==================== T2I Primitives ====================
 
-    async def generate_image(self, model: str = conf().get("image_model"), **request):
+    async def generate_image(self, model: str = None, **request):
         """
         T2I图片生成接口
         """
-        model = model if model != "default" else conf().get("image_model")
+        model = model if model and model != "default" else conf().get("image_model")
         logger.info(f"[Primitives] T2I generate: {model}")
         return await T2IClient.factory(model).generate(**request)
 

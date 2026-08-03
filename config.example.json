@@ -18,7 +18,7 @@
     "password": ""
   },
   "chat_model": "doubao-seed-2.0-lite",
-  "autopilot_model": "doubao-seed-2.0-lite",
+  "agent_model": "doubao-seed-2.0-lite",
   "memory_model": "doubao-seed-2.0-lite",
   "image_model": "doubao-seedream-5.0-lite",
   "max_context_text_units": 100000,

@@ -7,8 +7,7 @@ import copy
 from datetime import datetime
 import json
 import time
-from typing import Optional, List, Dict, Any, AsyncGenerator
-import uuid
+from typing import Optional, List, Dict, Any, AsyncGenerator, Union
 
 from common.log import logger
 from common.message import count_text_units
@@ -41,12 +40,15 @@ class PresenceService:
         stream: bool = False,
         username: Optional[str] = None,
         **kwargs,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> Union[AsyncGenerator[Dict[str, Any], None], Dict[str, Any]]:
         """
-        Single-round chat: inject memory → forward to LLM → async memory save.
+        Single-round chat with memory: inject memory → forward to LLM → async memory save.
+        This interface is specifically designed for third-party agent integration,
+        providing a memory-enabled chat interface that can be directly called by external agents.
         Returns async generator of OpenAI SSE chunks (stream) or single dict (non-stream).
         """
-        model = model if model and model != "default" else conf().get("chat_model")
+        messages = copy.deepcopy(messages)
+        model = model if model and model != "default" else conf().get("agent_model")
         
         # Extract instructions
         instructions = ""
@@ -56,8 +58,9 @@ class PresenceService:
 
         # Prepare memory via LLM-judged recall
         memory = await self._recall_memory(
-            messages=slice_new_turn_messages(messages),
+            history=slice_new_turn_messages(messages) or messages,
             instructions=instructions,
+            username=username,
         )
 
         # Prepare context for LLM
@@ -77,61 +80,67 @@ class PresenceService:
 
         if stream:
             async def _stream_gen():
-                reply_content = ""
+                new_message = {"role": "assistant", "reasoning_content": "", "content": "", "tool_calls": []}
                 try:
                     async for chunk in await LlmClient.factory(request["model"]).chat(**request):
-                        if chunk.get("choices"):
-                            delta = chunk["choices"][0].get("delta", {})
-                            if delta.get("content"):
-                                reply_content += delta["content"]
+                        try:
+                            if chunk.get("choices"):
+                                delta = chunk["choices"][0].get("delta", {})
+                                if delta.get("content"):
+                                    new_message["content"] += delta["content"]
+                                if delta.get("reasoning_content"):
+                                    new_message["reasoning_content"] += delta["reasoning_content"]
+                                if delta.get("tool_calls"):
+                                    for tool_call in delta["tool_calls"]:
+                                        if tool_call.get("id"):
+                                            # New tool call start (with id/name)
+                                            tool_call["function"]["arguments"] = tool_call["function"].get("arguments") or ""
+                                            new_message["tool_calls"].append(tool_call)
+                                        else:
+                                            # Incremental arguments delta → append to last tool call
+                                            new_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"].get("arguments") or ""
+                        except Exception as e:
+                            logger.error(f"[Presence] Stream chunk processing failed: {e}")
                         yield chunk
                 finally:
-                    # Async memory save after response completes
-                    if reply_content:
-                        await self.impression_manager.enqueue_maintain(
-                            messages=slice_new_turn_messages(
-                                messages + [{
-                                    "role": "assistant",
-                                    "content": reply_content
-                                }]
-                            ),
-                            instructions=instructions,
-                            username=username,
-                        )
+                    # Async memory save after response completes (even on early disconnect / stream error)
+                    try:
+                        if new_message["content"] or new_message["reasoning_content"] or new_message["tool_calls"]:
+                            await self.impression_manager.enqueue_maintain(
+                                history=slice_new_turn_messages(messages + [new_message]),
+                                instructions=instructions,
+                                username=username,
+                            )
+                    except Exception as e:
+                        logger.error(f"[Presence] Memory save failed: {e}")
             return _stream_gen()
         else:
             result = await LlmClient.factory(request["model"]).chat(**request)
-            reply_content = ""
-            if result.get("choices"):
-                message = result["choices"][0].get("message", {})
-                reply_content = message.get("content")
-            # Async memory save after response completes
-            if reply_content:
-                await self.impression_manager.enqueue_maintain(
-                    messages=slice_new_turn_messages(
-                        messages + [{
-                            "role": "assistant",
-                            "content": reply_content
-                        }]
-                    ),
-                    instructions=instructions,
-                    username=username,
-                )
+            try:
+                # Async memory save after response completes
+                new_message = result["choices"][0]["message"]
+                if new_message.get("reasoning_content") or new_message.get("content") or new_message.get("tool_calls"):
+                    await self.impression_manager.enqueue_maintain(
+                        history=slice_new_turn_messages(messages + [new_message]),
+                        instructions=instructions,
+                        username=username,
+                    )
+            except Exception as e:
+                logger.error(f"[Presence] Memory save failed: {e}")
             return result
 
     async def _recall_memory(
         self,
-        messages: List[Dict[str, Any]],
+        history: List[Dict[str, Any]],
         instructions: str = "",
-        model: str = None,
+        username: str = None,
     ) -> str:
         """
         Lightweight LLM-judged memory recall: classify current conversation topic
         against available categories/labels, then do targeted recall on top of
         recent mixed impressions (pinned + recent + category baseline).
         """
-        messages = copy.deepcopy(messages or [])
-        model = model if model and model != "default" else conf().get("memory_model")
+        model = conf().get("memory_model")
 
         impression_categories = await self.impression_manager.get_recent_categories()
         impression_labels = await self.impression_manager.get_mixed_labels()
@@ -141,38 +150,34 @@ class PresenceService:
         # mixed_impressions: List[(pin_emoji, (clue, content), score)], sorted desc
         mixed_clue_set = {clue for _, (clue, _), _ in mixed_impressions}
 
-        # Remove reasoning
-        for msg in messages:
-            msg["reasoning_content"] = None
-
         # Get recall tool definition from global tool manager
         send_tools = await self.tool_manager.get_definitions(filter=[RecallImpressionsTool.name])
 
-        # Prepare context for LLM
-        send_messages = []
-        if instructions:
-            send_messages.append({
-                "role": "system",
-                "content": instructions,
-            })
-        send_messages.extend(messages)
-        send_messages.append({
-            "role": "user",
-            "content": (
-                "Memory impression categories:\n"
-                "------\n"
-                f"{', '.join([name for name, _ in reversed(impression_categories)] or [])}\n"
-                "------\n\n"
-                "Memory impression labels:\n"
-                "------\n"
-                f"{', '.join([name for name, _ in reversed(impression_labels)] or [])}\n"
-                "------\n\n"
-                "Note:\n"
-                f"- Call {RecallImpressionsTool.name} once if needed.\n"
-                "- If there's no need to recall anything, just reply \"RECENT\" to use recent mixed impressions only."
-            )
-        })
-
+        # Build context
+        send_messages = self.context_builder.build_context(
+            history=[{
+                "role": "user",
+                "content": (
+                    "All your memory impression categories:\n"
+                    "------\n"
+                    f"{', '.join([name for name, _ in reversed(impression_categories)] or [])}\n"
+                    "------\n\n"
+                    "All your memory impression labels:\n"
+                    "------\n"
+                    f"{', '.join([name for name, _ in reversed(impression_labels)] or [])}\n"
+                    "------\n\n"
+                    f"New turn of conversation{f' with {username}' if username else ''}:\n"
+                    "------\n"
+                    f"{json.dumps(history, ensure_ascii=False, indent=2)}\n"
+                    "------\n\n"
+                    "Note:\n"
+                    f"- Call {RecallImpressionsTool.name} once if needed.\n"
+                    "- If there's no need to recall anything, just reply \"RECENT\" to use recent mixed impressions only."
+                )
+            }],
+            instructions=instructions,
+        )
+        
         request = {
             "messages": send_messages,
             "model": model,

@@ -219,7 +219,7 @@ class AgentService:
         active_time: Optional[float] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Single thinking round that handles LLM call and action/tool processing"""
-        model = model if model and model != "default" else conf().get("chat_model")
+        model = model if model and model != "default" else conf().get("agent_model")
         actions = actions or []
         tools = tools or []
 
@@ -348,7 +348,7 @@ class AgentService:
                         bot_message["tool_calls"].append(tool_call)
                         yield { "tool_calls": [tool_call] }
                     else:
-                        bot_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"]["arguments"]
+                        bot_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"].get("arguments") or ""
  
                 # Handle finish reason
                 if choice.get("finish_reason"):
@@ -394,7 +394,7 @@ class AgentService:
             # If bot_message has content or tool_calls, enqueue memory maintenance
             if bot_message.get("content") or bot_message.get("tool_calls"):
                 await self.impression_manager.enqueue_maintain(
-                    messages=slice_new_turn_messages(history),
+                    history=slice_new_turn_messages(history),
                     instructions=instructions,
                     username=username,
                 )

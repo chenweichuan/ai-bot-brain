@@ -116,10 +116,7 @@ You can:
 - Check for new messages from all sources to see if there's anything that need to reply.
 - Think about any other things you can do and planning future tasks."""
 
-            async for chunk in self.agent_service.think(
-                instructions=instructions,
-                model=conf().get("autopilot_model"),
-            ):
+            async for chunk in self.agent_service.think(instructions=instructions):
                 # Capture the session ID from the response chunk and persist it
                 if "session_id" in chunk:
                     session_id = chunk["session_id"]
