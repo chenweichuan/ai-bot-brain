@@ -594,8 +594,8 @@ def create_app() -> web.Application:
     # Upload Primitives Endpoints
     app.router.add_post("/primitives/file/upload", upload)
     
-    # Llm Primitives Endpoints - OpenAI-compatible, /primitives/llm/.../chat/completions
-    app.router.add_post("/primitives/llm{tail:.*}/chat/completions", chat)
+    # Llm Primitives Endpoints - OpenAI-compatible, /primitives/llm/.../chat/completions or /responses
+    app.router.add_post("/primitives/llm{tail:.*}/{endpoint:chat/completions|responses}", chat)
     
     # T2I Primitives Endpoints
     app.router.add_post("/primitives/t2i/generate-image", generate_image)
@@ -623,8 +623,8 @@ def create_app() -> web.Application:
     app.router.add_post("/agent/client/tool-result", receive_client_tool_result)
     app.router.add_post("/agent/client/end-wait-action", end_client_wait_action)
 
-    # Presence Endpoints - OpenAI-compatible, /presence/.../completions
-    app.router.add_post("/presence{tail:.*}/chat/completions", presence_chat)
+    # Presence Endpoints - OpenAI-compatible, /presence/.../chat/completions or /responses
+    app.router.add_post("/presence{tail:.*}/{endpoint:chat/completions|responses}", presence_chat)
     
     # Memory Endpoints
     app.router.add_get("/memory/get-auto-mode-history", get_auto_mode_history)

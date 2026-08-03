@@ -41,7 +41,6 @@ class ContextBuilder:
         max_model_rounds: int = MAX_MODEL_ROUNDS,
     ) -> List[Dict[str, Any]]:
         """Prepare context for LLM request"""
-        history = copy.deepcopy(history or [])
         actions = actions or []
         tools = tools or []
         max_text_units = min(abs(max_text_units), self.MAX_TEXT_UNITS)
@@ -97,12 +96,12 @@ class ContextBuilder:
             messages[index] = {k: v for k, v in msg.items() if k in valid_msg_fields}
 
         # Inject dynamic context as a synthetic __memory__ tool call
-        # before the last non-tool message (ephemeral, not persisted to history)
-        last_non_tool_idx = len(messages) - 1 - next(
-            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
+        # before the last user/assistant turn message (ephemeral, not persisted to history)
+        last_turn_idx = len(messages) - 1 - next(
+            (i for i, msg in enumerate(reversed(messages)) if msg["role"] in ["user", "assistant"]),
             len(messages) - 1
         )
-        messages.insert(last_non_tool_idx, {
+        messages.insert(last_turn_idx, {
             "role": "system",
             "content": "\n\n".join(filter(None, [
                 memory or "",
@@ -209,6 +208,8 @@ class ContextBuilder:
         max_model_rounds: int = MAX_MODEL_ROUNDS,
     ) -> List[Dict[str, Any]]:
         """Filter history messages"""
+        history = copy.deepcopy(history)
+
         # Filter valid messages
         history = [
             msg for msg in history

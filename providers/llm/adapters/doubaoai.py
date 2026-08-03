@@ -72,54 +72,54 @@ class DoubaoaiLlmAdapter(LlmClient):
                                     break
 
                                 try:
-                                    event = json.loads(data)
-                                    event_type = event.get("type", "")
+                                    chunk = json.loads(data)
+                                    chunk_type = chunk.get("type", "")
 
-                                    logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(event, ensure_ascii=False)}")
-                                    if event.get("response", {}).get("usage"):
-                                        logger.info(f"[DoubaoAI] Token usage ({request['model']}): {json.dumps(event['response']['usage'], ensure_ascii=False)}")
+                                    logger.info(f"[DoubaoAI] LLM response chunk: {json.dumps(chunk, ensure_ascii=False)}")
+                                    if chunk.get("response", {}).get("usage"):
+                                        logger.info(f"[DoubaoAI] Token usage ({request['model']}): {json.dumps(chunk['response']['usage'], ensure_ascii=False)}")
 
                                     # Responses 格式直接透传给上游，否则转换为 Completions 格式
                                     if not is_completions_format:
-                                        yield event
+                                        yield chunk
                                         continue
 
-                                    if event_type == "response.created":
-                                        result = event.get("response", {})
+                                    if chunk_type == "response.created":
+                                        result = chunk.get("response", {})
                                         common_fields["created"] = result.get("created_at")
                                         common_fields["id"] = result.get("id")
                                         common_fields["model"] = result.get("model") or request["model"]
                                         common_fields["service_tier"] = result.get("service_tier")
 
-                                    elif event_type == "response.reasoning_summary_part.added" and event.get("part", {}).get("type") == "summary_text":
+                                    elif chunk_type == "response.reasoning_summary_part.added" and chunk.get("part", {}).get("type") == "summary_text":
                                         if not has_reasoning_content:
                                             has_reasoning_content = True
                                         else:
                                             # 如果已经有推理内容片段了，插入新片段换行
                                             yield self._create_completions_chunk(reasoning_content="\n\n", **common_fields)
 
-                                    elif event_type == "response.reasoning_summary_text.delta":
+                                    elif chunk_type == "response.reasoning_summary_text.delta":
                                         # 推理内容增量
-                                        delta_reasoning = event.get("delta", "")
+                                        delta_reasoning = chunk.get("delta", "")
                                         if delta_reasoning:
                                             yield self._create_completions_chunk(reasoning_content=delta_reasoning, **common_fields)
 
-                                    elif event_type == "response.content_part.added" and event.get("part", {}).get("type") == "output_text":
+                                    elif chunk_type == "response.content_part.added" and chunk.get("part", {}).get("type") == "output_text":
                                         if not has_content:
                                             has_content = True
                                         else:
                                             # 如果已经有文本内容片段了，插入新片段换行
                                             yield self._create_completions_chunk(content="\n\n", **common_fields)
 
-                                    elif event_type == "response.output_text.delta":
+                                    elif chunk_type == "response.output_text.delta":
                                         # 正文文本增量
-                                        delta_text = event.get("delta", "")
+                                        delta_text = chunk.get("delta", "")
                                         if delta_text:
                                             yield self._create_completions_chunk(content=delta_text, **common_fields)
 
-                                    elif event_type == "response.output_item.added" and event.get("item", {}).get("type") == "function_call":
+                                    elif chunk_type == "response.output_item.added" and chunk.get("item", {}).get("type") == "function_call":
                                         # 新增 tool call 结构
-                                        item = event.get("item", {})
+                                        item = chunk.get("item", {})
                                         tool_call_item_ids.append(item.get("id", ""))
                                         tool_call = {
                                             "function": {
@@ -132,24 +132,24 @@ class DoubaoaiLlmAdapter(LlmClient):
                                         }
                                         yield self._create_completions_chunk(tool_call=tool_call, **common_fields)
 
-                                    elif event_type == "response.function_call_arguments.delta":
+                                    elif chunk_type == "response.function_call_arguments.delta":
                                         # tool call 参数增量
-                                        delta_args = event.get("delta", "")
-                                        item_id = event.get("item_id", "")
+                                        delta_args = chunk.get("delta", "")
+                                        item_id = chunk.get("item_id", "")
                                         tc_index = tool_call_item_ids.index(item_id) if item_id in tool_call_item_ids else None 
                                         if tc_index is not None and delta_args:
                                             tool_call = { "function": { "arguments": delta_args }, "index": tc_index }
                                             yield self._create_completions_chunk(tool_call=tool_call, **common_fields)
 
-                                    elif event_type == "response.completed":
-                                        result = event.get("response", {})
+                                    elif chunk_type == "response.completed":
+                                        result = chunk.get("response", {})
                                         usage = self._convert_to_completions_usage(result.get("usage"))
                                         finish_reason = "tool_calls" if len(tool_call_item_ids) > 0 else "stop"
                                         yield self._create_completions_chunk(finish_reason=finish_reason, usage=usage, **common_fields)
 
-                                    elif event_type == "response.incomplete":
+                                    elif chunk_type == "response.incomplete":
                                         # 响应不完整（如达到 max_output_tokens 限制）
-                                        result = event.get("response", {})
+                                        result = chunk.get("response", {})
                                         usage = self._convert_to_completions_usage(result.get("usage"))
                                         finish_reason = result.get("incomplete_details", {}).get("reason", "length")
                                         yield self._create_completions_chunk(finish_reason=finish_reason, usage=usage, **common_fields)

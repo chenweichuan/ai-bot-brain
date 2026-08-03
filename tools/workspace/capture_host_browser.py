@@ -102,7 +102,7 @@ class CaptureHostBrowserTool(Tool):
                     truncated_length = len(text) / count_text_units(text) * max_content_units * 0.9
                     text = f"{text[:int(truncated_length/2)]}\n...[Content Truncated]...\n{text[-int(truncated_length/2):]}"
                 result = f"✅ Browser text content captured successfully, the content is as follows:\n\n{text}"
-                summary = "✅ Browser text content captured successfully: " + (text.replace("\n", " ")[:100] + "..." if len(text) > 100 else text).replace("\n", " ")
+                summary = "✅ Browser text content captured successfully: " + (text[:100].replace("\n", " ") + ("..." if len(text) > 100 else ""))
             elif operation == "extract_element":
                 selector = tool_args.get("selector")
                 if not selector:

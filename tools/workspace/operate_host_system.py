@@ -42,7 +42,7 @@ class OperateHostSystemTool(Tool):
                     "properties": {
                         "operation": {
                             "type": "string",
-                            "description": "Type of computer operation to perform",
+                            "description": "Type of host system operation to perform",
                              "enum": [
                                  "command", "get_mouse_position",
                                  "mouse_click", "mouse_move", "mouse_scroll",
@@ -113,7 +113,7 @@ class OperateHostSystemTool(Tool):
         }
     
     async def execute(self, arguments: str) -> tuple[Union[str, List[Dict[str, Any]]], str]:
-        """Execute computer operation"""
+        """Execute host system operation"""
         tool_args = json.loads(arguments)
         operation = tool_args.get("operation")
         display = self.os_display
@@ -132,7 +132,7 @@ class OperateHostSystemTool(Tool):
         
         if operation == "command":
             command = tool_args.get("command")
-            preview = command[:50].replace('\n', ' ') + '...' if len(command) > 50 else command.replace('\n', ' ')
+            preview = command[:50].replace("\n", " ") + ("..." if len(command) > 50 else "")
 
             returncode, stdout_text, stderr_text = await self.computer_client.exec_command(command)
             
@@ -292,7 +292,7 @@ class OperateHostSystemTool(Tool):
         elif operation == "type_text":
             text = tool_args.get("text")
             returncode, stdout_text, stderr_text = await self.computer_client.type_text(text, display)
-            preview = text[:30] + "..." if len(text) > 30 else text
+            preview = text[:30] + ("..." if len(text) > 30 else "")
             if returncode == 0:
                 result_text = f"Typed text: {text}"
                 summary = f"✅ Typed: {preview}"

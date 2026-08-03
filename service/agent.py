@@ -184,13 +184,14 @@ class AgentService:
             from_message_id=from_message_id,
             after_message_id=after_message_id,
         )
-        
+
         valid_history = []
         for msg in history:
             # remove tool call arguments
             if msg.get("tool_calls"):
                 for tool_call in msg["tool_calls"]:
-                    tool_call["function"]["arguments"] = ""
+                    arguments = tool_call["function"]["arguments"]
+                    tool_call["function"]["arguments"] = arguments[:50].replace("\n", " ") + ("..." if len(arguments) > 50 else "")
             # replace tool message content with summary
             if msg.get("role") == "tool":
                 msg["content"] = msg.get("summary", "")
@@ -348,7 +349,13 @@ class AgentService:
                         bot_message["tool_calls"].append(tool_call)
                         yield { "tool_calls": [tool_call] }
                     else:
+                        arguments_length = len(bot_message["tool_calls"][-1]["function"]["arguments"])
                         bot_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"].get("arguments") or ""
+                        arguments_new_length = len(bot_message["tool_calls"][-1]["function"]["arguments"])
+                        if arguments_new_length < 50:
+                            yield { "tool_calls": [tool_call] }
+                        elif arguments_length < 50 and arguments_new_length >= 50:
+                            yield { "tool_calls": [{ "function": { "arguments": "..." }}] }
  
                 # Handle finish reason
                 if choice.get("finish_reason"):

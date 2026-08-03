@@ -35,7 +35,6 @@ class PresenceService:
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
         model: str = None,
         stream: bool = False,
         username: Optional[str] = None,
@@ -47,67 +46,73 @@ class PresenceService:
         providing a memory-enabled chat interface that can be directly called by external agents.
         Returns async generator of OpenAI SSE chunks (stream) or single dict (non-stream).
         """
-        messages = copy.deepcopy(messages)
+        is_completions_format = "messages" in kwargs
+        history = copy.deepcopy(kwargs["messages"]) if is_completions_format else copy.deepcopy(kwargs["input"])
         model = model if model and model != "default" else conf().get("agent_model")
         
         # Extract instructions
         instructions = ""
-        if messages[0].get("role") in ("system", "developer"):
-            instructions = messages[0]["content"]
-            del messages[0]
+        if history[0].get("role") in ("system", "developer"):
+            instructions = history[0]["content"]
+            del history[0]
 
         # Prepare memory via LLM-judged recall
         memory = await self._recall_memory(
-            history=slice_new_turn_messages(messages) or messages,
+            history=slice_new_turn_messages(history) or history,
             instructions=instructions,
             username=username,
         )
 
         # Prepare context for LLM
-        send_messages = self._build_context(
+        send_context = self._build_context(
             instructions=instructions,
-            messages=messages,
+            history=history,
             memory=memory,
             username=username,
         )
 
         request = dict(
             **kwargs,
-            messages=send_messages,
             model=model,
             stream=stream,
         )
+        if is_completions_format:
+            request["messages"] = send_context
+        else:
+            request["input"] = send_context
 
         if stream:
             async def _stream_gen():
-                new_message = {"role": "assistant", "reasoning_content": "", "content": "", "tool_calls": []}
+                new_history = []
                 try:
                     async for chunk in await LlmClient.factory(request["model"]).chat(**request):
                         try:
-                            if chunk.get("choices"):
+                            if is_completions_format and chunk.get("choices"):
                                 delta = chunk["choices"][0].get("delta", {})
+                                if not new_history:
+                                    new_history.append({"role": "assistant", "reasoning_content": "", "content": "", "tool_calls": []})
                                 if delta.get("content"):
-                                    new_message["content"] += delta["content"]
+                                    new_history[0]["content"] += delta["content"]
                                 if delta.get("reasoning_content"):
-                                    new_message["reasoning_content"] += delta["reasoning_content"]
+                                    new_history[0]["reasoning_content"] += delta["reasoning_content"]
                                 if delta.get("tool_calls"):
                                     for tool_call in delta["tool_calls"]:
                                         if tool_call.get("id"):
-                                            # New tool call start (with id/name)
                                             tool_call["function"]["arguments"] = tool_call["function"].get("arguments") or ""
-                                            new_message["tool_calls"].append(tool_call)
+                                            new_history[0]["tool_calls"].append(tool_call)
                                         else:
-                                            # Incremental arguments delta → append to last tool call
-                                            new_message["tool_calls"][-1]["function"]["arguments"] += tool_call["function"].get("arguments") or ""
+                                            new_history[0]["tool_calls"][-1]["function"]["arguments"] += tool_call["function"].get("arguments") or ""
+                            elif chunk.get("response", {}).get("output"):
+                                new_history = chunk["response"]["output"]
                         except Exception as e:
                             logger.error(f"[Presence] Stream chunk processing failed: {e}")
                         yield chunk
                 finally:
                     # Async memory save after response completes (even on early disconnect / stream error)
                     try:
-                        if new_message["content"] or new_message["reasoning_content"] or new_message["tool_calls"]:
+                        if new_history:
                             await self.impression_manager.enqueue_maintain(
-                                history=slice_new_turn_messages(messages + [new_message]),
+                                history=slice_new_turn_messages(history + new_history),
                                 instructions=instructions,
                                 username=username,
                             )
@@ -118,10 +123,10 @@ class PresenceService:
             result = await LlmClient.factory(request["model"]).chat(**request)
             try:
                 # Async memory save after response completes
-                new_message = result["choices"][0]["message"]
-                if new_message.get("reasoning_content") or new_message.get("content") or new_message.get("tool_calls"):
+                new_history = [result.get("choices")[0]["message"]] if is_completions_format else result.get("response", {}).get("output", [])
+                if new_history:
                     await self.impression_manager.enqueue_maintain(
-                        history=slice_new_turn_messages(messages + [new_message]),
+                        history=slice_new_turn_messages(history + new_history),
                         instructions=instructions,
                         username=username,
                     )
@@ -267,12 +272,12 @@ class PresenceService:
     def _build_context(
         self,
         instructions: str,
-        messages: List[Dict[str, Any]],
+        history: List[Dict[str, Any]],
         memory: str = "",
         username: str = None,
      ) -> List[Dict[str, Any]]:
         """Prepare context for LLM request"""
-        messages = copy.deepcopy(messages)
+        history = copy.deepcopy(history)
 
         # Build system message
         system_message = self.context_builder.build_system_message(
@@ -280,15 +285,15 @@ class PresenceService:
         )
 
         # Combine system message and messages
-        messages = [system_message] + messages
+        history = [system_message] + history
 
         # Inject dynamic context as a synthetic system message
-        # before the last non-tool message (ephemeral, not persisted to history)
-        last_non_tool_idx = len(messages) - 1 - next(
-            (i for i, msg in enumerate(reversed(messages)) if msg["role"] != "tool"),
-            len(messages) - 1
+        # before the last user/assistant turn message (ephemeral, not persisted to history)
+        last_turn_idx = len(history) - 1 - next(
+            (i for i, msg in enumerate(reversed(history)) if msg["role"] in ["user", "assistant"]),
+            len(history) - 1
         )
-        messages.insert(last_non_tool_idx, {
+        history.insert(last_turn_idx, {
             "role": "system",
             "content": "\n\n".join(filter(None, [
                 memory or "",
@@ -300,4 +305,4 @@ class PresenceService:
             ]))
         })
 
-        return messages
+        return history
