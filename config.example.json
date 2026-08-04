@@ -32,32 +32,45 @@
     {
       "name": "doubaoai",
       "api_base": "https://ark.cn-beijing.volces.com/api/v3",
-      "api_key": "your_doubaoai_api_key",
-      "prefixes": ["doubao-", "ep-"]
+      "api_key": "your_doubaoai_api_key"
     },
     {
       "name": "zhipuai",
       "api_base": "https://open.bigmodel.cn/api/paas/v4",
-      "api_key": "your_zhipuai_api_key",
-      "prefixes": ["glm-"],
-      "vision_fallback": {
-        "glm-4.7": "glm-4.6v",
-        "glm-5.2": "glm-5v-turbo"
-      }
+      "api_key": "your_zhipuai_api_key"
     },
     {
       "name": "googleai",
       "api_base": "https://generativelanguage.googleapis.com/v1beta",
-      "api_key": "your_googleai_api_key",
-      "prefixes": ["gemini-"]
+      "api_key": "your_googleai_api_key"
     },
     {
       "name": "openai",
       "api_base": "https://api.openai.com/v1",
-      "api_key": "your_openai_api_key",
-      "prefixes": ["gpt-"]
+      "api_key": "your_openai_api_key"
     }
   ],
+  "model_routes": [
+    {
+      "prefixes": ["doubao-"],
+      "provider": "doubaoai",
+      "format": "responses"
+    },
+    {
+      "prefixes": ["glm-"],
+      "provider": "zhipuai",
+      "format": "completions"
+    },
+    {
+      "prefixes": ["gpt-"],
+      "provider": "openai",
+      "format": "completions"
+    }
+  ],
+  "model_vision_fallback": {
+    "glm-4.7": "glm-4.6v",
+    "glm-5.2": "glm-5v-turbo"
+  },
   "content_moderation": {
     "enabled": true,
     "provider": "aliyun",
