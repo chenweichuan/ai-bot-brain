@@ -1,13 +1,31 @@
 from common.log import logger
 from common.message import stringify_message_content
-from config import conf
 from providers.llm.media import get_base64_data_url
 
 
-MODEL_VISION_FALLBACK = conf().get("model_vision_fallback", {})
-
-async def preprocess_request(request: dict):
+async def preprocess_request(request: dict, vision_fallback: dict = None):
     """Preprocessing shared by both Completions and Responses request paths."""
+    # Vision model fallback
+    has_visual_content = any(
+        isinstance(msg.get("content"), list)
+        and any(
+            (part or {}).get("type") in ["image_url", "video_url"]
+            for part in msg.get("content")
+        )
+        for msg in request.get("messages", [])
+    ) or any(
+        isinstance(item.get("content"), list)
+        and any(
+            (part or {}).get("type") in ["input_image", "input_video"]
+            for part in item.get("content")
+        )
+        for item in request.get("input", [])
+    )
+    if has_visual_content:
+        vision_model = vision_fallback.get(request.get("model")) if isinstance(vision_fallback, dict) else vision_fallback
+        if vision_model:
+            request["model"] = vision_model
+
     for msg in request.get("messages", []):
         # Non-user roles do not support structured content -> plain text
         if msg["role"] != "user":
@@ -52,20 +70,6 @@ async def preprocess_request(request: dict):
         preprocess_gpt_request(request)
     elif request["model"].startswith("glm-"):
         preprocess_glm_request(request)
-
-    # Vision model fallback
-    has_visual_content = any(
-        isinstance(msg.get("content"), list)
-        and any(
-            (part or {}).get("type") in ["image_url", "video_url"]
-            for part in msg.get("content", [])
-        )
-        for msg in request.get("messages", [])
-    )
-    if has_visual_content:
-        vision_model = MODEL_VISION_FALLBACK.get(request.get("model"))
-        if vision_model:
-            request["model"] = vision_model
 
 def preprocess_gpt_request(request: dict):
     """OpenAI-specific parameter adjustments."""

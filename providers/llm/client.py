@@ -5,6 +5,7 @@ import httpx
 
 from common.log import logger
 from common.message import truncate_media_urls_for_logging
+from common.model import resolve_route
 from config import conf
 from providers.llm.converter import (
     to_responses_request,
@@ -12,31 +13,6 @@ from providers.llm.converter import (
     to_completions_chunk,
 )
 from providers.llm.quirks import preprocess_request
-
-
-"""Load model_providers config as a name-indexed dict."""
-MODEL_PROVIDERS = { p["name"]: p for p in conf().get("model_providers", []) }
-
-"""Load model_routes as a flat list of (prefix, provider, format) entries,
-sorted by longest prefix first so more specific prefixes always win."""
-MODEL_ROUTES = []
-for route in conf().get("model_routes", []):
-    provider = route["provider"]
-    format = route.get("format", "completions")
-    for prefix in route.get("prefixes", []):
-        MODEL_ROUTES.append((prefix, provider, format))
-MODEL_ROUTES.sort(key=lambda e: len(e[0]), reverse=True)
-
-def _resolve_route(model: str):
-    """Resolve provider connection config and API format for a model name."""
-    for prefix, provider_name, format in MODEL_ROUTES:
-        if model.startswith(prefix):
-            if provider_name not in MODEL_PROVIDERS:
-                raise ValueError(
-                    f"Provider '{provider_name}' not found in model_providers config"
-                )
-            return MODEL_PROVIDERS[provider_name], format
-    raise ValueError(f"No route configured for model: {model}")
 
 
 class LlmClient:
@@ -50,11 +26,12 @@ class LlmClient:
 
     _instances = {}
 
-    def __init__(self, provider: dict, model_format: str):
+    def __init__(self, provider: dict, route: dict):
         self.provider_name = provider["name"]
         self.api_base = provider["api_base"]
         self.api_key = provider["api_key"]
-        self.model_format = model_format
+        self.model_format = route.get("format", "completions")
+        self.vision_fallback = route.get("vision_fallback")
 
     @classmethod
     def factory(cls, model: str) -> "LlmClient":
@@ -67,10 +44,10 @@ class LlmClient:
         2. Look up the corresponding provider connection config.
         3. Return a client configured with endpoint + format.
         """
-        provider, format = _resolve_route(model)
-        cache_key = (provider["name"], format)
+        provider, route = resolve_route(model)
+        cache_key = (provider["name"], route["format"])
         if cache_key not in cls._instances:
-            cls._instances[cache_key] = cls(provider, format)
+            cls._instances[cache_key] = cls(provider, route)
         return cls._instances[cache_key]
 
     async def chat(self, **request):
@@ -79,7 +56,7 @@ class LlmClient:
 
         # Preprocess requests before any conversion:
         # custom media URL -> base64, completions structured content -> plain text, provider quirks.
-        await preprocess_request(request)
+        await preprocess_request(request, self.vision_fallback)
 
         # Convert request to the model's native format when needed.
         if request_format != self.model_format and self.model_format == "responses":

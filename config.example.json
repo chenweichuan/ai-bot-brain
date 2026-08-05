@@ -6,10 +6,10 @@
   "bot_os_user": "bot",
   "bot_os_workspace": "/opt/bot",
   "os_display": ":0",
-  "storage_base_path": "/opt/bot/storage",
+  "storage_base_path": "/opt/www/storage",
   "storage_base_url": "https://your-domain.com/storage",
-  "tmp_base_path": "/opt/bot/tmp",
-  "models_base_path": "/opt/bot/models",
+  "tmp_base_path": "/tmp",
+  "models_base_path": "/opt/www/models",
   "short_link_base_url": "https://your-domain.com/l",
   "redis": {
     "host": "localhost",
@@ -30,47 +30,42 @@
   "rate_limit_image": 5,
   "model_providers": [
     {
-      "name": "doubaoai",
+      "name": "volcengine",
       "api_base": "https://ark.cn-beijing.volces.com/api/v3",
-      "api_key": "your_doubaoai_api_key"
+      "api_key": "your_volcengine_api_key"
     },
     {
-      "name": "zhipuai",
+      "name": "deepseek",
+      "api_base": "https://api.deepseek.com",
+      "api_key": "your_deepseek_api_key"
+    },
+    {
+      "name": "zhipu",
       "api_base": "https://open.bigmodel.cn/api/paas/v4",
-      "api_key": "your_zhipuai_api_key"
-    },
-    {
-      "name": "googleai",
-      "api_base": "https://generativelanguage.googleapis.com/v1beta",
-      "api_key": "your_googleai_api_key"
-    },
-    {
-      "name": "openai",
-      "api_base": "https://api.openai.com/v1",
-      "api_key": "your_openai_api_key"
+      "api_key": "your_zhipu_api_key"
     }
   ],
   "model_routes": [
     {
       "prefixes": ["doubao-"],
-      "provider": "doubaoai",
+      "provider": "volcengine",
       "format": "responses"
     },
     {
-      "prefixes": ["glm-"],
-      "provider": "zhipuai",
+      "prefixes": ["deepseek-"],
+      "provider": "deepseek",
       "format": "completions"
     },
     {
-      "prefixes": ["gpt-"],
-      "provider": "openai",
-      "format": "completions"
+      "prefixes": ["glm-"],
+      "provider": "zhipu",
+      "format": "completions",
+      "vision_fallback": {
+        "glm-4.7": "glm-4.6v",
+        "glm-5.2": "glm-5v-turbo"
+      }
     }
   ],
-  "model_vision_fallback": {
-    "glm-4.7": "glm-4.6v",
-    "glm-5.2": "glm-5v-turbo"
-  },
   "content_moderation": {
     "enabled": true,
     "provider": "aliyun",

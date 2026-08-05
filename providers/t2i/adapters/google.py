@@ -16,10 +16,10 @@ from providers.t2i.client import T2IClient
 from config import conf
 
 
-API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "googleai"), {})
+API_CONFIG = next((p for p in conf().get("model_providers", []) if p["name"] == "google"), {})
 
 
-class GoogleaiT2IAdapter(T2IClient):
+class GoogleT2IAdapter(T2IClient):
     _instance = None
     
     @classmethod

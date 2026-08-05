@@ -1,8 +1,8 @@
 # encoding:utf-8
-from providers.t2i.adapters.doubaoai import DoubaoaiT2IAdapter
-from providers.t2i.adapters.googleai import GoogleaiT2IAdapter
+from providers.t2i.adapters.volcengine import VolcengineT2IAdapter
+from providers.t2i.adapters.google import GoogleT2IAdapter
 
 __all__ = [
-    "DoubaoaiT2IAdapter",
-    "GoogleaiT2IAdapter",
+    "VolcengineT2IAdapter",
+    "GoogleT2IAdapter",
 ]

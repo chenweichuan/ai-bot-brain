@@ -1,37 +1,31 @@
-from config import conf
+from common.model import resolve_route
 
-
-# prefix到provider名称的映射
-_PREFIX_PROVIDER_MAP = {
-    prefix: provider.get("name", "unknown")
-    for provider in conf().get("model_providers", [])
-    for prefix in provider.get("prefixes", [])
-}
 
 class T2IClient:
     """T2I客户端基类"""
     _instance = None
-    
+
     @staticmethod
     def factory(model: str):
-        """工厂方法，根据模型名称返回对应的适配器实例"""
-        from providers.t2i.adapters import (
-            DoubaoaiT2IAdapter,
-            GoogleaiT2IAdapter,
-        )
+        """工厂方法，根据模型名称返回对应的适配器实例
 
-        # provider名称到适配器类的映射
-        provider_adapter_map = {
-            "doubaoai": DoubaoaiT2IAdapter,
-            "googleai": GoogleaiT2IAdapter,
-        }
+        通过 common.model.resolve_route 解析 provider，
+        再按命名约定 {ProviderName}T2IAdapter 动态查找适配器类。
+        """
+        provider, _ = resolve_route(model)
+        provider_name = provider["name"]
 
-        for prefix in _PREFIX_PROVIDER_MAP:
-            if model.startswith(prefix):
-                adapter_class = provider_adapter_map.get(_PREFIX_PROVIDER_MAP[prefix])
-                return adapter_class.get_instance()
-        
-        raise Exception(f"No corresponding adapter for this model ({model})")
+        # 按命名约定动态查找适配器类: {provider_name.capitalize()}T2IAdapter
+        import providers.t2i.adapters as adapters_module
+        class_name = f"{provider_name.capitalize()}T2IAdapter"
+        adapter_class = getattr(adapters_module, class_name, None)
+        if adapter_class is None:
+            raise Exception(
+                f"No T2I adapter found for provider '{provider_name}' "
+                f"(expected class name: {class_name})"
+            )
+
+        return adapter_class.get_instance()
 
     @classmethod
     def get_instance(cls):
