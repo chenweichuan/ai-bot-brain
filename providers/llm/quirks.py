@@ -5,27 +5,6 @@ from providers.llm.media import get_base64_data_url
 
 async def preprocess_request(request: dict, vision_fallback: dict = None):
     """Preprocessing shared by both Completions and Responses request paths."""
-    # Vision model fallback
-    has_visual_content = any(
-        isinstance(msg.get("content"), list)
-        and any(
-            (part or {}).get("type") in ["image_url", "video_url"]
-            for part in msg.get("content")
-        )
-        for msg in request.get("messages", [])
-    ) or any(
-        isinstance(item.get("content"), list)
-        and any(
-            (part or {}).get("type") in ["input_image", "input_video"]
-            for part in item.get("content")
-        )
-        for item in request.get("input", [])
-    )
-    if has_visual_content:
-        vision_model = vision_fallback.get(request.get("model")) if isinstance(vision_fallback, dict) else vision_fallback
-        if vision_model:
-            request["model"] = vision_model
-
     for msg in request.get("messages", []):
         # Non-user roles do not support structured content -> plain text
         if msg["role"] != "user":
@@ -71,6 +50,27 @@ async def preprocess_request(request: dict, vision_fallback: dict = None):
         request["thinking"] = {"type": "enabled"}
     elif request.get("thinking") is False:
         request["thinking"] = {"type": "disabled"}
+
+    # Vision model fallback
+    has_visual_content = any(
+        isinstance(msg.get("content"), list)
+        and any(
+            (part or {}).get("type") in ["image_url", "video_url"]
+            for part in msg.get("content")
+        )
+        for msg in request.get("messages", [])
+    ) or any(
+        isinstance(item.get("content"), list)
+        and any(
+            (part or {}).get("type") in ["input_image", "input_video"]
+            for part in item.get("content")
+        )
+        for item in request.get("input", [])
+    )
+    if has_visual_content:
+        vision_model = vision_fallback.get(request.get("model")) if isinstance(vision_fallback, dict) else vision_fallback
+        if vision_model:
+            request["model"] = vision_model
 
     if request["model"].startswith("glm-"):
         preprocess_glm_request(request)
