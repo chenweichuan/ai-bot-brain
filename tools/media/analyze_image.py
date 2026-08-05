@@ -50,7 +50,7 @@ class AnalyzeImageTool(Tool):
                 "type": "image",
                 "image": {
                     "url": input_item,
-                    "detail": "high",
+                    "detail": "xhigh",
                 },
             })
         

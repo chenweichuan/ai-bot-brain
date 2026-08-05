@@ -75,7 +75,7 @@ class LlmClient:
 
         if request.get("stream"):
             async def process_stream():
-                ctx = None
+                convert_context = None
                 async with httpx.AsyncClient() as client:
                     try:
                         async with client.stream(
@@ -106,7 +106,7 @@ class LlmClient:
                                         )
 
                                     if request_format != self.model_format and request_format == "completions":
-                                        chunk, ctx = to_completions_chunk(chunk, ctx)
+                                        chunk, convert_context = to_completions_chunk(chunk, convert_context)
                                         if not chunk:
                                             continue
 

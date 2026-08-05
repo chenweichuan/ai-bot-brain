@@ -66,45 +66,37 @@ async def preprocess_request(request: dict, vision_fallback: dict = None):
                         part["text"] = f"Video Unavailable: {part['video']['url']}"
                         del part["video"]
 
-    if request["model"].startswith("gpt-"):
-        preprocess_gpt_request(request)
-    elif request["model"].startswith("glm-"):
+    # thinking bool -> thinking object
+    if request.get("thinking") is True:
+        request["thinking"] = {"type": "enabled"}
+    elif request.get("thinking") is False:
+        request["thinking"] = {"type": "disabled"}
+
+    if request["model"].startswith("glm-"):
         preprocess_glm_request(request)
+    elif request["model"].startswith("gpt-"):
+        preprocess_gpt_request(request)
 
 def preprocess_gpt_request(request: dict):
     """OpenAI-specific parameter adjustments."""
+    is_completions_format = "messages" in request
+    
     for msg in request.get("messages", []):
         if msg["role"] == "system":
             msg["role"] = "developer"
         if "reasoning_content" in msg:
             del msg["reasoning_content"]
 
-    # thinking bool -> reasoning_effort string
+    # thinking dict -> reasoning dict
     if request.get("thinking") is not None:
-        thinking = request["thinking"]
-        if isinstance(thinking, bool):
-            request["reasoning_effort"] = "high" if thinking else "low"
+        is_disabled = request["thinking"].get("type") == "disabled"
+        if is_disabled and is_completions_format:
+            request["reasoning_effort"] = "none"
+        elif is_disabled:
+            request["reasoning"] = { "effort": "none" }
         del request["thinking"]
-
-    # top_p is not supported by OpenAI reasoning models
-    if "top_p" in request:
-        del request["top_p"]
 
 def preprocess_glm_request(request: dict):
     """ZhipuAI-specific parameter adjustments."""
-    # Default: disable built-in web search
-    request["tools"] = request.get("tools") or []
-    if not any(tool.get("type") == "web_search" for tool in request["tools"]):
-        request["tools"].append({
-            "type": "web_search",
-            "web_search": {"enable": False},
-        })
-
     # Stream tool calls as well
     request["tool_stream"] = request.get("stream")
-
-    # thinking bool -> ZhipuAI thinking object
-    if request.get("thinking") is True:
-        request["thinking"] = {"type": "enabled"}
-    elif request.get("thinking") is False:
-        request["thinking"] = {"type": "disabled"}

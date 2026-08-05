@@ -43,7 +43,6 @@ def to_responses_request(request: dict) -> dict:
                             "arguments": tc["function"].get("arguments", ""),
                         }
                     )
-
         elif role == "tool":
             # tool role -> function_call_output
             new_input.append(
@@ -53,7 +52,6 @@ def to_responses_request(request: dict) -> dict:
                     "output": msg.get("content"),
                 }
             )
-
         elif role == "user" and isinstance(msg.get("content"), list):
             # User structured content needs field name conversion
             new_content = []
@@ -103,29 +101,6 @@ def to_responses_request(request: dict) -> dict:
     if request.get("max_tokens") is not None:
         new_request["max_output_tokens"] = request["max_tokens"]
 
-    # thinking / reasoning
-    # Upstream sends thinking=True/False (boolean), convert to Responses thinking.type
-    thinking = request.get("thinking")
-    if thinking is not None:
-        if isinstance(thinking, bool):
-            new_request["thinking"] = {"type": "enabled" if thinking else "disabled"}
-            # When thinking is disabled, reasoning.effort must be minimal
-            if not thinking:
-                new_request["reasoning"] = {"effort": "minimal"}
-        elif isinstance(thinking, dict):
-            # Support direct thinking={"type": "enabled"/"disabled"/"auto"}
-            new_request["thinking"] = thinking
-            if thinking.get("type") == "disabled":
-                new_request["reasoning"] = {"effort": "minimal"}
-
-    # reasoning.effort independently controls thinking length
-    if request.get("reasoning_effort") is not None:
-        effort = request["reasoning_effort"]
-        new_request["reasoning"] = {"effort": effort}
-        # minimal is equivalent to disabling thinking
-        if effort == "minimal":
-            new_request["thinking"] = {"type": "disabled"}
-
     # tools
     if request.get("tools"):
         new_request["tools"] = []
@@ -143,7 +118,7 @@ def to_responses_request(request: dict) -> dict:
                 # Other tool types pass through directly
                 new_request["tools"].append(tool)
 
-    # tool_choice
+    # tool choice
     if request.get("tool_choice") is not None:
         tool_choice = request["tool_choice"]
         if isinstance(tool_choice, str):
@@ -154,7 +129,12 @@ def to_responses_request(request: dict) -> dict:
                 "name": tool_choice["function"].get("name", ""),
             }
 
-    # response_format
+    # reasoning effort
+    if request.get("reasoning_effort"):
+        new_request["reasoning"] = { "effort": request["reasoning_effort"] }
+        del request["reasoning_effort"]
+
+    # response format
     if request.get("response_format"):
         new_request["text"] = {"format": request["response_format"]}
 
@@ -378,7 +358,6 @@ def create_completions_chunk(
         result["choices"][0]["finish_reason"] = finish_reason
 
     return result
-
 
 def to_completions_usage(usage: dict) -> dict:
     """Convert Responses usage to Chat Completions format."""

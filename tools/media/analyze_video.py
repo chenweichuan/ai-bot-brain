@@ -44,7 +44,7 @@ class AnalyzeVideoTool(Tool):
             "type": "video",
             "video": {
                 "url": input,
-                "fps": 3,
+                "fps": 5,
             },
         }]
         
