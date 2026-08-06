@@ -68,8 +68,8 @@ sudo useradd -m -d /home/bot -s /bin/bash
 sudo passwd -l bot
 
 # 创建bot工作空间
-sudo mkdir -p /opt/bot
-sudo chown -R bot:bot /opt/bot
+sudo mkdir -p /opt/workspace
+sudo chown -R bot:bot /opt/workspace
 
 # 允许bot使用用户级别的systemctl
 sudo loginctl enable-linger bot

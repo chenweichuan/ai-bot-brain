@@ -1,4 +1,4 @@
-from .analyze_image import AnalyzeImageTool
+from .analyze_images import AnalyzeImagesTool
 from .generate_image import GenerateImageTool
 from .transcribe_voice import TranscribeVoiceTool
 from .synthesize_voice import SynthesizeVoiceTool
@@ -7,7 +7,7 @@ from .recognize_qrcode import RecognizeQRCodeTool
 from .generate_qrcode import GenerateQRCodeTool
 
 __all__ = [
-    "AnalyzeImageTool",
+    "AnalyzeImagesTool",
     "GenerateImageTool",
     "TranscribeVoiceTool",
     "SynthesizeVoiceTool",

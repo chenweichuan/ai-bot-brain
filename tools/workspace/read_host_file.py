@@ -4,6 +4,8 @@ from typing import Dict, Any
 from tools.base import Tool
 from providers.computer.client import ComputerClient
 
+from common.tmp_dir import TmpDir
+
 
 class ReadHostFileTool(Tool):
     """Read host file tool - read content from host files"""
@@ -22,7 +24,7 @@ class ReadHostFileTool(Tool):
             "function": {
                 "name": self.name,
                 "description": "File reader - Read content from host files. "
-                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and {TmpDir.path()} directories. "
                     "Priority SHOULD be given to the use of workspace.",
                 "parameters": {
                     "type": "object",

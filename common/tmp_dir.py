@@ -12,7 +12,7 @@ from config import conf
 class TmpDir(object):
     """A temporary directory that is deleted when the object is destroyed."""
 
-    base_path = conf().get("tmp_base_path")
+    base_path = conf().get("tmp_base_path", "/tmp")
 
     @staticmethod
     def path():
@@ -55,7 +55,7 @@ class TmpDir(object):
         file_name = f"{str(int(time.time() * 1000))}-{hashlib.md5(buffered).hexdigest()}"
         file_kind = filetype.guess(buffered)
         file_ext = file_kind.extension if file_kind else "bin"
-        file_path = f"{TmpDir.base_path}/{file_name}.{file_ext}"
+        file_path = f"{TmpDir.path()}/{file_name}.{file_ext}"
 
         # Save to temporary directory
         logger.info("[TmpDir] save file: {}".format(file_path))

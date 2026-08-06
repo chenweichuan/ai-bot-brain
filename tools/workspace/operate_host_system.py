@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Union
 from PIL import Image, ImageDraw
 
 from common.message import count_text_units
+from common.tmp_dir import TmpDir
 from tools.base import Tool
 from providers.computer.client import ComputerClient
 
@@ -34,7 +35,7 @@ class OperateHostSystemTool(Tool):
             "function": {
                 "name": self.name,
                 "description": f"Operate your host system running {self.os_distro}. "
-                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories, and your account ({self.os_user})'s own processes. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and {TmpDir.path()} directories, and your account ({self.os_user})'s own processes. "
                     "Supports system commands, desktop GUI operations, and waiting to view desktop changes. "
                     "All mouse coordinates are based on the desktop screen size.",
                 "parameters": {
@@ -404,7 +405,7 @@ class OperateHostSystemTool(Tool):
         """
         Capture desktop and return the screenshot structure with text and image_url
         """
-        save_path = os.path.join(self.os_workspace, "desktop_screenshot", f"{time.time_ns()}.png")
+        save_path = os.path.join(TmpDir.path(), "desktop_screenshot", f"{time.time_ns()}.png")
         if not os.path.exists(os.path.dirname(save_path)):
             prepare_command = f"mkdir -p $(dirname {shlex.quote(save_path)})"
             await self.computer_client.exec_command(prepare_command)

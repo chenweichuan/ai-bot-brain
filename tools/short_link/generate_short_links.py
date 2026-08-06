@@ -6,6 +6,7 @@ from tools.base import Tool
 from providers.computer.client import ComputerClient
 from providers.storage.client import StorageClient
 from common.log import logger
+from common.tmp_dir import TmpDir
 from providers.short_link.client import ShortLinkClient
 
 
@@ -29,7 +30,7 @@ class GenerateShortLinksTool(Tool):
                 "description": f"Generate short links for host files or URLs. "
                     "file_paths: snapshots host files to immutable copies (original changes don't affect the link); "
                     "urls: pure redirects (no copy, target changes follow). "
-                    f"Files restricted to workspace ({self.os_workspace}) or /tmp. Max 5 per array.",
+                    f"Files restricted to workspace ({self.os_workspace}) or {TmpDir.path()}. Max 5 per array.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -73,13 +74,13 @@ class GenerateShortLinksTool(Tool):
                 if not os.path.isabs(file_path):
                     file_path = os.path.normpath(os.path.join(self.os_workspace, file_path))
 
-                # Validate file is within workspace or /tmp
-                if not file_path.startswith(self.os_workspace) and not file_path.startswith("/tmp"):
+                # Validate file is within workspace or tmp_dir
+                if not file_path.startswith(self.os_workspace) and not file_path.startswith(TmpDir.path()):
                     results.append({
                         "source": file_path,
                         "type": "file",
                         "status": "failed",
-                        "error": f"Access denied: The file MUST be in the workspace ({self.os_workspace}) or /tmp directory."
+                        "error": f"Access denied: The file MUST be in the workspace ({self.os_workspace}) or f{TmpDir.path()} directory."
                     })
                     fail_count += 1
                     continue

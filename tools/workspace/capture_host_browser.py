@@ -8,6 +8,8 @@ from tools.base import Tool
 from providers.computer.client import ComputerClient
 from tools.workspace.operate_host_browser import get_current_page
 
+from common.tmp_dir import TmpDir
+
 
 class CaptureHostBrowserTool(Tool):
     """Capture page content from host browser"""
@@ -73,7 +75,7 @@ class CaptureHostBrowserTool(Tool):
             if operation == "screenshot":
                 full_page = area == "full"
                 img_bytes = await page.screenshot(full_page=full_page, type="png")
-                file_path = os.path.join(self.os_workspace, "browser_screenshot", f"{time.time_ns()}.png")
+                file_path = os.path.join(TmpDir.path(), "browser_screenshot", f"{time.time_ns()}.png")
                 prepare_command = f"mkdir -p $(dirname {shlex.quote(file_path)}) && touch {shlex.quote(file_path)} && chmod 777 {shlex.quote(file_path)}"
                 await self.computer_client.exec_command(prepare_command)
                 with open(file_path, 'wb') as f:

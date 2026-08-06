@@ -29,8 +29,8 @@ class ComputerClient:
     def __init__(self):
         self.os_distro = f"{distro.name()} {distro.version()}"
         self.os_user = conf().get("bot_os_user", "bot")
-        self.os_workspace = conf().get("bot_os_workspace", "/opt/bot")
-        self.os_display = conf().get("os_display", ":1")
+        self.os_display = conf().get("bot_os_display", ":1")
+        self.os_workspace = conf().get("bot_os_workspace", "/opt/workspace")
         
         # Browser management
         self._browser: Optional[Browser] = None
@@ -318,7 +318,7 @@ class ComputerClient:
         cmd = f"xdotool search --name \"{window_name}\" windowactivate"
         return await self.exec_desktop(cmd, 10, display)
 
-    async def capture_desktop(self, save_path: str = "/tmp/desktop_screenshot.png", display: str = None) -> tuple[int, str, str]:
+    async def capture_desktop(self, save_path: str, display: str = None) -> tuple[int, str, str]:
         """Capture full desktop screenshot to file using ImageMagick import"""
         cmd = f"import -window root {save_path}"
         return await self.exec_desktop(cmd, 10, display)

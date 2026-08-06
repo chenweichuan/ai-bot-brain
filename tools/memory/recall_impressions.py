@@ -5,6 +5,8 @@ from typing import Dict, Any
 from tools.base import Tool
 from memory.impression_manager import ImpressionManager, RecallImpressionsTool as ImpressMemRecallTool
 
+from tools.media import AnalyzeImagesTool
+
 
 class RecallImpressionsTool(Tool):
     """Tool for recalling memory impressions with multi-dimensional query support"""
@@ -18,7 +20,12 @@ class RecallImpressionsTool(Tool):
     
     async def get_definition(self) -> Dict[str, Any]:
         """Get tool definition for LLM"""
-        return self.impressmem_tool.get_definition()
+        definition = self.impressmem_tool.get_definition()
+        
+        definition["function"]["description"] += " Note: When image identification is needed and retrieved impressions contain reference images, " \
+            + f"use {AnalyzeImagesTool.name} to compare the target against those references."
+        
+        return definition
     
     async def execute(self, arguments: str) -> tuple[str, str]:
         """

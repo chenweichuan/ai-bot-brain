@@ -4,6 +4,8 @@ from typing import Dict, Any
 from tools.base import Tool
 from providers.computer.client import ComputerClient
 
+from common.tmp_dir import TmpDir
+
 
 class WriteHostFileTool(Tool):
     """Write host file tool - write content to host files directly"""
@@ -23,7 +25,7 @@ class WriteHostFileTool(Tool):
             "function": {
                 "name": self.name,
                 "description": "File writer - Write content to a host file in small segments. "
-                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and /tmp directories. "
+                    f"Access is restricted to: your home (default), workspace ({self.os_workspace}) and {TmpDir.path()} directories. "
                     "Priority SHOULD be given to the use of workspace. "
                     "Note: Invoke only when there is a clear need to write file"
                     "⚠️ CRITICAL CHUNKING RULES: "
