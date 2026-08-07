@@ -22,8 +22,7 @@ class SessionManager:
     """
     _instance: Optional['SessionManager'] = None
     
-    USER_SESSIONS_PER_SET = 100
-    MESSAGES_PER_SET = 100
+    MESSAGES_PER_SET = max(conf().get("max_context_messages", 100), 100)
     
     @classmethod
     def get_instance(cls) -> 'SessionManager':

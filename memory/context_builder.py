@@ -15,7 +15,7 @@ class ContextBuilder:
     """Manager for building and managing conversation context"""
     _instance = None
 
-    MAX_TEXT_UNITS = conf().get("max_context_text_units", 100000)
+    MAX_TEXT_UNITS = conf().get("max_context_text_units", 100_000)
     MAX_MESSAGES = conf().get("max_context_messages", 100)
     MAX_MODEL_ROUNDS = conf().get("max_context_model_rounds", 30)
 
