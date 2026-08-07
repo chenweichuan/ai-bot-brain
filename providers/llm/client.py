@@ -27,10 +27,10 @@ class LlmClient:
     _instances = {}
 
     def __init__(self, provider: dict, route: dict):
-        self.provider_name = provider["name"]
+        self.provider_name = provider.get("name") or "default"
         self.api_base = provider["api_base"]
         self.api_key = provider["api_key"]
-        self.model_format = route.get("format", "completions")
+        self.model_format = route.get("format") or "completions"
         self.vision_fallback = route.get("vision_fallback")
 
     @classmethod
@@ -45,7 +45,7 @@ class LlmClient:
         3. Return a client configured with endpoint + format.
         """
         provider, route = resolve_route(model)
-        cache_key = (provider["name"], route["format"])
+        cache_key = (provider.get("name"), route.get("format"))
         if cache_key not in cls._instances:
             cls._instances[cache_key] = cls(provider, route)
         return cls._instances[cache_key]
@@ -93,16 +93,17 @@ class LlmClient:
 
                                 try:
                                     chunk = json.loads(data)
+                                    usage = chunk.get("response", {}).get("usage") if self.model_format == "responses" else chunk.get("usage")
 
                                     logger.info(
                                         f"[{self.provider_name}] LLM response chunk: "
                                         f"{json.dumps(chunk, ensure_ascii=False)}"
                                     )
-                                    if chunk.get("usage"):
+                                    if usage:
                                         logger.info(
                                             f"[{self.provider_name}] Token usage "
                                             f"({chunk.get('model', request.get('model'))}): "
-                                            f"{json.dumps(chunk['usage'], ensure_ascii=False)}"
+                                            f"{json.dumps(usage, ensure_ascii=False)}"
                                         )
 
                                     if request_format != self.model_format and request_format == "completions":

@@ -26,7 +26,7 @@
   "max_context_model_rounds": 30,
   "max_impression_text_units_per_set": 10000,
   "max_think_rounds": 100,
-  "auto_scheduler_interval": 3600,
+  "auto_scheduler_interval": 1800,
   "rate_limit_image": 5,
   "model_providers": [
     {

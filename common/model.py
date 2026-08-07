@@ -4,14 +4,17 @@
 from config import conf
 
 
-# provider name -> provider config dict, indexed by name for fast lookup
-MODEL_PROVIDERS = { p["name"]: p for p in conf().get("model_providers", []) }
+# provider list
+MODEL_PROVIDERS = conf().get("model_providers", [])
 
 # Flat list of (prefix, provider_dict, route_dict) tuples,
 # sorted by longest prefix first so more specific prefixes always match first.
 MODEL_ROUTES = []
 for route in conf().get("model_routes", []):
-    provider = MODEL_PROVIDERS[route["provider"]]
+    if route.get("provider"):
+        provider = next(p for p in MODEL_PROVIDERS if p.get("name") == route["provider"])
+    else:
+        provider = MODEL_PROVIDERS[0]
     for prefix in route.get("prefixes", []):
         MODEL_ROUTES.append((prefix, provider, route))
 MODEL_ROUTES.sort(key=lambda e: len(e[0]), reverse=True)
@@ -40,4 +43,4 @@ def resolve_route(model: str):
     for prefix, provider, route in MODEL_ROUTES:
         if model.startswith(prefix):
             return provider, route
-    raise ValueError(f"No route configured for model: {model}")
+    return MODEL_PROVIDERS[0], {}
